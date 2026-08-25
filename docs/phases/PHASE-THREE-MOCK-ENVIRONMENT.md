@@ -99,13 +99,13 @@ Phase Three is complete when:
   - [x] Implement mock refund record primitive
   - [x] Ensure all mutations write audit events
   - [x] Add audit tests
-- [ ] Milestone 3.8 - Idempotency Records
-  - [ ] Implement idempotency key table helpers
-  - [ ] Store original argument hash
-  - [ ] Store original result payload
-  - [ ] Return existing result for matching retries
-  - [ ] Return conflict for reused key with different args
-  - [ ] Add idempotency tests
+- [x] Milestone 3.8 - Idempotency Records
+  - [x] Implement idempotency key table helpers
+  - [x] Store original argument hash
+  - [x] Store original result payload
+  - [x] Return existing result for matching retries
+  - [x] Return conflict for reused key with different args
+  - [x] Add idempotency tests
 - [ ] Milestone 3.9 - Injected Failure Mechanism
   - [ ] Define injected failure schema
   - [ ] Load failures from scenario JSON

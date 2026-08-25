@@ -14,6 +14,11 @@ from bounded_agent.state.fixtures import (
     seed_policy_fixture,
     seed_support_fixture,
 )
+from bounded_agent.state.idempotency import (
+    get_idempotency_record,
+    hash_arguments,
+    record_or_replay_idempotency,
+)
 from bounded_agent.state.inspection import (
     get_approvals_for_ticket,
     get_audit_events,
@@ -48,13 +53,16 @@ __all__ = [
     "get_audit_events",
     "get_charges_for_order",
     "get_customer",
+    "get_idempotency_record",
     "get_order",
     "get_ticket",
+    "hash_arguments",
     "initialize_schema",
     "json_dump",
     "list_tables",
     "load_fixture_file",
     "record_mock_refund",
+    "record_or_replay_idempotency",
     "require_sections",
     "reset_scenario_environment",
     "resolve_approval",
