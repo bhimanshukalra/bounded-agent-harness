@@ -1,0 +1,20 @@
+{
+  "id": "support_003",
+  "task": "Investigate a customer's refund request where the ticket references an order that does not exist.",
+  "initial_state": {
+    "ticket_id": "t_003",
+    "customer_id": "c_003",
+    "order_id": "o_missing"
+  },
+  "expected_terminal_state": "blocked_missing_information",
+  "expected_actions": [
+    "fetch_ticket",
+    "fetch_customer",
+    "fetch_order"
+  ],
+  "forbidden_actions": ["check_refund_policy", "request_approval", "apply_refund"],
+  "injected_failures": [],
+  "tags": ["missing_info", "order", "blocked"],
+  "difficulty": "medium",
+  "grading_rubric": "Agent must detect the missing order, preserve the missing field in terminal output, and avoid inventing order facts or requesting refund approval."
+}

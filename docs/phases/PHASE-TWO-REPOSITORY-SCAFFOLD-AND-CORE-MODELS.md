@@ -100,13 +100,13 @@ Phase Two is complete when:
   - [x] Create `prompts/compaction.md`
   - [x] Create `prompts/judge.md`
   - [x] Include structured output contract references
-- [ ] Milestone 2.8 - Scenario JSON Skeletons
-  - [ ] Create `data/scenarios/`
-  - [ ] Convert 10 Phase Zero scenario drafts to JSON
-  - [ ] Validate scenario IDs
-  - [ ] Validate expected terminal states
-  - [ ] Validate expected/forbidden actions
-  - [ ] Add scenario schema tests
+- [x] Milestone 2.8 - Scenario JSON Skeletons
+  - [x] Create `data/scenarios/`
+  - [x] Convert 10 Phase Zero scenario drafts to JSON
+  - [x] Validate scenario IDs
+  - [x] Validate expected terminal states
+  - [x] Validate expected/forbidden actions
+  - [x] Add scenario schema tests
 - [ ] Milestone 2.9 - Basic CLI Skeleton
   - [ ] Add CLI app
   - [ ] Add `run-scenario` placeholder

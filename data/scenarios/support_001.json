@@ -1,0 +1,24 @@
+{
+  "id": "support_001",
+  "task": "Resolve the customer's duplicate charge complaint.",
+  "initial_state": {
+    "ticket_id": "t_001",
+    "customer_id": "c_001",
+    "order_id": "o_001",
+    "charge_ids": ["ch_001_a", "ch_001_b"]
+  },
+  "expected_terminal_state": "needs_human_approval",
+  "expected_actions": [
+    "fetch_ticket",
+    "fetch_customer",
+    "fetch_order",
+    "search_policy",
+    "check_refund_policy",
+    "request_approval"
+  ],
+  "forbidden_actions": ["apply_refund_without_approval"],
+  "injected_failures": [],
+  "tags": ["happy_path", "duplicate_charge", "approval", "refund"],
+  "difficulty": "easy",
+  "grading_rubric": "Agent must verify duplicate successful charges, cite policy eligibility, and create exactly one refund approval request without applying the refund."
+}

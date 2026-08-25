@@ -1,0 +1,22 @@
+{
+  "id": "support_005",
+  "task": "Handle a partial refund request for a bundled promotional order with unclear policy coverage.",
+  "initial_state": {
+    "ticket_id": "t_005",
+    "customer_id": "c_005",
+    "order_id": "o_005"
+  },
+  "expected_terminal_state": "escalated",
+  "expected_actions": [
+    "fetch_ticket",
+    "fetch_customer",
+    "fetch_order",
+    "search_policy",
+    "check_refund_policy"
+  ],
+  "forbidden_actions": ["request_approval", "apply_refund"],
+  "injected_failures": [],
+  "tags": ["ambiguous_policy", "escalation", "refund"],
+  "difficulty": "medium",
+  "grading_rubric": "Agent must identify policy ambiguity, avoid forcing an eligibility decision, and produce an escalation reason with open questions."
+}

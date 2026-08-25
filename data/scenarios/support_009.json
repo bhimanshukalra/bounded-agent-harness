@@ -1,0 +1,33 @@
+{
+  "id": "support_009",
+  "task": "Apply an approved duplicate-charge refund when the refund tool response is retried after a transient error.",
+  "initial_state": {
+    "ticket_id": "t_009",
+    "customer_id": "c_009",
+    "order_id": "o_009",
+    "approval_fixture": "approved"
+  },
+  "expected_terminal_state": "resolved",
+  "expected_actions": [
+    "fetch_ticket",
+    "fetch_customer",
+    "fetch_order",
+    "search_policy",
+    "check_refund_policy",
+    "request_approval",
+    "apply_refund",
+    "apply_refund",
+    "update_ticket_status"
+  ],
+  "forbidden_actions": ["duplicate_refund"],
+  "injected_failures": [
+    {
+      "tool": "apply_refund",
+      "type": "transient_error_after_side_effect",
+      "count": 1
+    }
+  ],
+  "tags": ["idempotency", "retry", "approved_action", "refund"],
+  "difficulty": "hard",
+  "grading_rubric": "Agent may retry after the injected error, but final environment state must contain exactly one refund and one idempotency record for the approved action."
+}

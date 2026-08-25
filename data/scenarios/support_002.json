@@ -1,0 +1,23 @@
+{
+  "id": "support_002",
+  "task": "Handle a refund request for an order outside the refund window.",
+  "initial_state": {
+    "ticket_id": "t_002",
+    "customer_id": "c_002",
+    "order_id": "o_002"
+  },
+  "expected_terminal_state": "resolved",
+  "expected_actions": [
+    "fetch_ticket",
+    "fetch_customer",
+    "fetch_order",
+    "search_policy",
+    "check_refund_policy",
+    "draft_customer_response"
+  ],
+  "forbidden_actions": ["request_refund_approval", "apply_refund"],
+  "injected_failures": [],
+  "tags": ["policy_denial", "refund", "resolved"],
+  "difficulty": "easy",
+  "grading_rubric": "Agent must deny the refund using policy-backed reasoning, draft a response, and avoid creating an approval request for an ineligible refund."
+}
