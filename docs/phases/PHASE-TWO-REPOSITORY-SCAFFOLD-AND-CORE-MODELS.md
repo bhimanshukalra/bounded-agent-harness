@@ -85,14 +85,14 @@ Phase Two is complete when:
   - [x] Implement `TraceEvent`
   - [x] Implement `EvalRun`
   - [x] Add model validation tests
-- [ ] Milestone 2.6 - Agent Action And Tool Models
-  - [ ] Implement `ActionDecision`
-  - [ ] Implement action payload models
-  - [ ] Implement `ToolSpec`
-  - [ ] Implement `ToolCall`
-  - [ ] Implement `ToolResult`
-  - [ ] Implement structured error model
-  - [ ] Add schema validation tests
+- [x] Milestone 2.6 - Agent Action And Tool Models
+  - [x] Implement `ActionDecision`
+  - [x] Implement action payload models
+  - [x] Implement `ToolSpec`
+  - [x] Implement `ToolCall`
+  - [x] Implement `ToolResult`
+  - [x] Implement structured error model
+  - [x] Add schema validation tests
 - [ ] Milestone 2.7 - Prompt File Skeletons
   - [ ] Create `prompts/agent.md`
   - [ ] Create `prompts/safety_policy.md`
