@@ -5,6 +5,7 @@ from bounded_agent.tools.execution import (
     tool_connection,
 )
 from bounded_agent.tools.models import Observation, ToolCall, ToolError, ToolResult, ToolSpec
+from bounded_agent.tools.policy_tools import check_refund_policy
 from bounded_agent.tools.read_tools import fetch_customer, fetch_order, fetch_ticket, search_policy
 from bounded_agent.tools.registry import (
     DEFAULT_REGISTERED_TOOLS,
@@ -79,6 +80,7 @@ __all__ = [
     "UpdateTicketStatusInput",
     "UpdateTicketStatusOutput",
     "build_default_registry",
+    "check_refund_policy",
     "error_result",
     "fetch_customer",
     "fetch_order",

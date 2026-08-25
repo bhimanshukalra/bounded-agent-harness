@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from bounded_agent.domain import ErrorType, PermissionLevel
 from bounded_agent.tools.execution import ToolExecutionContext, error_result
 from bounded_agent.tools.models import ToolCall, ToolResult, ToolSpec
+from bounded_agent.tools.policy_tools import check_refund_policy
 from bounded_agent.tools.read_tools import fetch_customer, fetch_order, fetch_ticket, search_policy
 from bounded_agent.tools.schemas import (
     AddTicketCommentInput,
@@ -295,6 +296,7 @@ DEFAULT_REGISTERED_TOOLS = [
         DEFAULT_TOOL_SPECS["check_refund_policy"],
         CheckRefundPolicyInput,
         CheckRefundPolicyOutput,
+        executor=check_refund_policy,
     ),
     registered_tool(
         DEFAULT_TOOL_SPECS["draft_customer_response"],

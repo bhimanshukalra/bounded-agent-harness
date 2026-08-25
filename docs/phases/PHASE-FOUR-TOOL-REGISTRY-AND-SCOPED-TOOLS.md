@@ -72,13 +72,13 @@ Phase Four is complete when:
   - [x] Implement `search_policy`
   - [x] Ensure read tools do not write audit events or mutations
   - [x] Add read tool tests
-- [ ] Milestone 4.5 - Policy Reasoning Tools
-  - [ ] Implement `check_refund_policy`
-  - [ ] Detect duplicate charge eligibility
-  - [ ] Detect refund-window ineligibility
-  - [ ] Detect ambiguous bundled-promotion cases
-  - [ ] Return policy references and rationale
-  - [ ] Add policy tool tests
+- [x] Milestone 4.5 - Policy Reasoning Tools
+  - [x] Implement `check_refund_policy`
+  - [x] Detect duplicate charge eligibility
+  - [x] Detect refund-window ineligibility
+  - [x] Detect ambiguous bundled-promotion cases
+  - [x] Return policy references and rationale
+  - [x] Add policy tool tests
 - [ ] Milestone 4.6 - Draft And Low-Risk Write Tools
   - [ ] Implement `draft_customer_response`
   - [ ] Implement `add_ticket_comment`
@@ -398,6 +398,21 @@ Policy tool and tests.
 ### Acceptance Check
 
 Scenario policy decisions are deterministic and do not rely on prompt-only reasoning.
+
+### Implementation Note
+
+Milestone 4.5 introduced `src/bounded_agent/tools/policy_tools.py` and attached the
+`check_refund_policy` executor to the default registry.
+
+The tool deterministically handles:
+
+- duplicate successful charges as eligible with approval required
+- old refund-window requests as ineligible
+- bundled promotional partial refunds as manual review
+- missing ticket, order, or customer records as structured `not_found` errors
+
+The tool returns policy references, rationale, required evidence, approval requirement, and a
+recommended next action without mutating environment state.
 
 ## Milestone 4.6 - Draft And Low-Risk Write Tools
 
