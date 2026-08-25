@@ -60,13 +60,13 @@ Phase Two is complete when:
   - [x] Create data folders
   - [x] Create prompt folders
   - [x] Create report folders
-- [ ] Milestone 2.3 - Configuration And Environment Skeleton
-  - [ ] Create `.env.example`
-  - [ ] Create config module
-  - [ ] Define default paths
-  - [ ] Define default budgets
-  - [ ] Define feature flags
-  - [ ] Add config validation tests
+- [x] Milestone 2.3 - Configuration And Environment Skeleton
+  - [x] Create `.env.example`
+  - [x] Create config module
+  - [x] Define default paths
+  - [x] Define default budgets
+  - [x] Define feature flags
+  - [x] Add config validation tests
 - [ ] Milestone 2.4 - Domain Enums
   - [ ] Implement terminal states
   - [ ] Implement permission levels
