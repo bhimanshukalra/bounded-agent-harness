@@ -62,15 +62,15 @@ Phase Three is complete when:
   - [x] Add `idempotency_keys` table
   - [x] Add `injected_failures` table
   - [x] Add schema tests
-- [ ] Milestone 3.3 - Fixture Data Design
-  - [ ] Create support seed fixture
-  - [ ] Create policy fixture
-  - [ ] Include duplicate-charge data
-  - [ ] Include refund-ineligible data
-  - [ ] Include missing-record scenario support
-  - [ ] Include ambiguous-policy data
-  - [ ] Include prompt-injection ticket text
-  - [ ] Include approval approved/denied fixture hooks
+- [x] Milestone 3.3 - Fixture Data Design
+  - [x] Create support seed fixture
+  - [x] Create policy fixture
+  - [x] Include duplicate-charge data
+  - [x] Include refund-ineligible data
+  - [x] Include missing-record scenario support
+  - [x] Include ambiguous-policy data
+  - [x] Include prompt-injection ticket text
+  - [x] Include approval approved/denied fixture hooks
 - [ ] Milestone 3.4 - Fixture Loader
   - [ ] Implement fixture file loading
   - [ ] Implement database seeding
