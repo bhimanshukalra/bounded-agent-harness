@@ -58,13 +58,13 @@ Phase Four is complete when:
   - [x] Add shared context model for execution
   - [x] Add validation helpers
   - [x] Add schema tests
-- [ ] Milestone 4.3 - Tool Registry
-  - [ ] Define central registry module
-  - [ ] Register all planned tool specs
-  - [ ] Validate tool names against allowlist
-  - [ ] Fetch tool specs by name
-  - [ ] List tools by permission level
-  - [ ] Add registry tests
+- [x] Milestone 4.3 - Tool Registry
+  - [x] Define central registry module
+  - [x] Register all planned tool specs
+  - [x] Validate tool names against allowlist
+  - [x] Fetch tool specs by name
+  - [x] List tools by permission level
+  - [x] Add registry tests
 - [ ] Milestone 4.4 - Read-Only Inspection Tools
   - [ ] Implement `fetch_ticket`
   - [ ] Implement `fetch_customer`
@@ -305,6 +305,21 @@ Tool registry and registry tests.
 ### Acceptance Check
 
 The registry can execute a valid read-only tool and reject an unknown tool name.
+
+### Implementation Note
+
+Milestone 4.3 introduced `src/bounded_agent/tools/registry.py` with:
+
+- `ToolRegistry`
+- `RegisteredTool`
+- `ToolExecutor`
+- `DEFAULT_TOOL_SPECS`
+- `DEFAULT_REGISTERED_TOOLS`
+- `build_default_registry`
+- `registered_tool`
+
+The default registry now knows every planned Phase Four tool and its input/output schema pair. Tool
+executors are attached in later milestones as each scoped tool is implemented.
 
 ## Milestone 4.4 - Read-Only Inspection Tools
 

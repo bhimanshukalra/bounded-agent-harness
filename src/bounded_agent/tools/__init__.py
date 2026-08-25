@@ -5,6 +5,15 @@ from bounded_agent.tools.execution import (
     tool_connection,
 )
 from bounded_agent.tools.models import Observation, ToolCall, ToolError, ToolResult, ToolSpec
+from bounded_agent.tools.registry import (
+    DEFAULT_REGISTERED_TOOLS,
+    DEFAULT_TOOL_SPECS,
+    RegisteredTool,
+    ToolExecutor,
+    ToolRegistry,
+    build_default_registry,
+    registered_tool,
+)
 from bounded_agent.tools.schemas import (
     AddTicketCommentInput,
     AddTicketCommentOutput,
@@ -34,6 +43,8 @@ from bounded_agent.tools.schemas import (
 )
 
 __all__ = [
+    "DEFAULT_REGISTERED_TOOLS",
+    "DEFAULT_TOOL_SPECS",
     "AddTicketCommentInput",
     "AddTicketCommentOutput",
     "ApplyRefundInput",
@@ -49,6 +60,7 @@ __all__ = [
     "FetchTicketInput",
     "FetchTicketOutput",
     "Observation",
+    "RegisteredTool",
     "RequestApprovalInput",
     "RequestApprovalOutput",
     "SearchPolicyInput",
@@ -57,13 +69,17 @@ __all__ = [
     "ToolCall",
     "ToolError",
     "ToolExecutionContext",
+    "ToolExecutor",
     "ToolInputSchema",
     "ToolOutputSchema",
+    "ToolRegistry",
     "ToolResult",
     "ToolSpec",
     "UpdateTicketStatusInput",
     "UpdateTicketStatusOutput",
+    "build_default_registry",
     "error_result",
+    "registered_tool",
     "success_result",
     "tool_connection",
     "validate_tool_schema",
