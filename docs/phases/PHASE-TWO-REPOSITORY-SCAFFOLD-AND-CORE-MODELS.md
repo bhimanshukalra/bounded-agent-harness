@@ -93,13 +93,13 @@ Phase Two is complete when:
   - [x] Implement `ToolResult`
   - [x] Implement structured error model
   - [x] Add schema validation tests
-- [ ] Milestone 2.7 - Prompt File Skeletons
-  - [ ] Create `prompts/agent.md`
-  - [ ] Create `prompts/safety_policy.md`
-  - [ ] Create `prompts/verifier.md`
-  - [ ] Create `prompts/compaction.md`
-  - [ ] Create `prompts/judge.md`
-  - [ ] Include structured output contract references
+- [x] Milestone 2.7 - Prompt File Skeletons
+  - [x] Create `prompts/agent.md`
+  - [x] Create `prompts/safety_policy.md`
+  - [x] Create `prompts/verifier.md`
+  - [x] Create `prompts/compaction.md`
+  - [x] Create `prompts/judge.md`
+  - [x] Include structured output contract references
 - [ ] Milestone 2.8 - Scenario JSON Skeletons
   - [ ] Create `data/scenarios/`
   - [ ] Convert 10 Phase Zero scenario drafts to JSON
