@@ -8,14 +8,36 @@ from bounded_agent.domain.enums import (
     ScenarioTag,
     TerminalState,
 )
+from bounded_agent.domain.models import (
+    AgentState,
+    ApprovalRequest,
+    BudgetUsage,
+    EvalRun,
+    RunError,
+    Scenario,
+    Task,
+    TerminalResult,
+    TraceEvent,
+    VerifierResult,
+)
 
 __all__ = [
     "ActionType",
+    "AgentState",
+    "ApprovalRequest",
     "ApprovalStatus",
+    "BudgetUsage",
     "ErrorType",
+    "EvalRun",
     "PermissionLevel",
+    "RunError",
     "RunnerType",
+    "Scenario",
     "ScenarioDifficulty",
     "ScenarioTag",
+    "Task",
+    "TerminalResult",
     "TerminalState",
+    "TraceEvent",
+    "VerifierResult",
 ]

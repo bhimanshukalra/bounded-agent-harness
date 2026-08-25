@@ -75,16 +75,16 @@ Phase Two is complete when:
   - [x] Implement error types
   - [x] Implement scenario difficulty/tags where useful
   - [x] Add enum stability tests
-- [ ] Milestone 2.5 - Core Pydantic Models
-  - [ ] Implement `Task`
-  - [ ] Implement `Scenario`
-  - [ ] Implement `AgentState`
-  - [ ] Implement `BudgetUsage`
-  - [ ] Implement `ApprovalRequest`
-  - [ ] Implement `TerminalResult`
-  - [ ] Implement `TraceEvent`
-  - [ ] Implement `EvalRun`
-  - [ ] Add model validation tests
+- [x] Milestone 2.5 - Core Pydantic Models
+  - [x] Implement `Task`
+  - [x] Implement `Scenario`
+  - [x] Implement `AgentState`
+  - [x] Implement `BudgetUsage`
+  - [x] Implement `ApprovalRequest`
+  - [x] Implement `TerminalResult`
+  - [x] Implement `TraceEvent`
+  - [x] Implement `EvalRun`
+  - [x] Add model validation tests
 - [ ] Milestone 2.6 - Agent Action And Tool Models
   - [ ] Implement `ActionDecision`
   - [ ] Implement action payload models
