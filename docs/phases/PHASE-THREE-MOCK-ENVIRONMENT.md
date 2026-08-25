@@ -91,14 +91,14 @@ Phase Three is complete when:
   - [x] Implement policy inspection helpers
   - [x] Implement final-state snapshot helper
   - [x] Add inspection tests
-- [ ] Milestone 3.7 - Audit Log And Mutating Operation Primitives
-  - [ ] Implement audit event writer
-  - [ ] Implement internal ticket comment primitive
-  - [ ] Implement approval record primitive
-  - [ ] Implement status update primitive
-  - [ ] Implement mock refund record primitive
-  - [ ] Ensure all mutations write audit events
-  - [ ] Add audit tests
+- [x] Milestone 3.7 - Audit Log And Mutating Operation Primitives
+  - [x] Implement audit event writer
+  - [x] Implement internal ticket comment primitive
+  - [x] Implement approval record primitive
+  - [x] Implement status update primitive
+  - [x] Implement mock refund record primitive
+  - [x] Ensure all mutations write audit events
+  - [x] Add audit tests
 - [ ] Milestone 3.8 - Idempotency Records
   - [ ] Implement idempotency key table helpers
   - [ ] Store original argument hash
