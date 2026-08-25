@@ -114,12 +114,12 @@ Phase Two is complete when:
   - [x] Add `reset-env` placeholder
   - [x] Add `show-trace` placeholder
   - [x] Verify CLI help works
-- [ ] Milestone 2.10 - Phase Three Readiness Review
-  - [ ] Confirm scaffold imports cleanly
-  - [ ] Confirm tests pass
-  - [ ] Confirm scenarios validate
-  - [ ] Confirm contracts have code homes
-  - [ ] Write Phase Two completion note
+- [x] Milestone 2.10 - Phase Three Readiness Review
+  - [x] Confirm scaffold imports cleanly
+  - [x] Confirm tests pass
+  - [x] Confirm scenarios validate
+  - [x] Confirm contracts have code homes
+  - [x] Write Phase Two completion note
 
 ## Milestone 2.1 - Project Metadata And Dependency Setup
 
@@ -507,17 +507,50 @@ Confirm the project is ready for mock environment implementation.
 
 ### Review Checklist
 
-- `pyproject.toml` exists.
-- Package imports cleanly.
-- Core directories exist.
-- Config skeleton exists.
-- Domain enums exist.
-- Core Pydantic models exist.
-- Action and tool models exist.
-- Prompt skeletons exist.
-- Scenario JSON skeletons exist.
-- CLI help works.
-- Model and scenario validation tests pass.
+- [x] `pyproject.toml` exists.
+- [x] Package imports cleanly.
+- [x] Core directories exist.
+- [x] Config skeleton exists.
+- [x] Domain enums exist.
+- [x] Core Pydantic models exist.
+- [x] Action and tool models exist.
+- [x] Prompt skeletons exist.
+- [x] Scenario JSON skeletons exist.
+- [x] CLI help works.
+- [x] Model and scenario validation tests pass.
+
+### Phase Two Completion Note
+
+```text
+Phase Two is complete. The repository now has project metadata, a src-layout Python package,
+configuration loading, stable domain enums, core Pydantic models, agent action and tool contracts,
+versioned prompt skeletons, ten scenario JSON skeletons, a basic Typer CLI, and validation tests.
+The scaffold imports cleanly, scenario fixtures validate through the Scenario model, and the CLI
+can validate scenarios before runtime agent behavior exists.
+```
+
+### Phase Three Entry Point
+
+Phase Three should begin with the mocked support environment.
+
+Recommended first implementation tasks:
+
+1. Design the SQLite schema for tickets, customers, orders, charges, policies, approvals, audit log, and idempotency keys.
+2. Add fixture data under `data/fixtures/`.
+3. Implement deterministic environment reset per scenario.
+4. Implement final-state inspection helpers.
+5. Implement injected failure configuration.
+6. Add audit logging for every mutation.
+7. Add tests for reset, inspection, mutation, injected failures, and audit log behavior.
+
+### Phase Two Verification Commands
+
+```text
+uv run pytest
+uv run ruff check .
+uv run bounded-agent --help
+uv run bounded-agent validate-scenarios
+```
 
 ### Deliverable
 
