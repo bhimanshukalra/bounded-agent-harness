@@ -77,13 +77,13 @@ Phase Three is complete when:
   - [x] Validate fixture shape
   - [x] Make fixture loading deterministic
   - [x] Add fixture loader tests
-- [ ] Milestone 3.5 - Scenario Reset System
-  - [ ] Implement reset by scenario ID
-  - [ ] Clear run-specific state
-  - [ ] Load base fixtures
-  - [ ] Apply scenario-specific initial state
-  - [ ] Configure scenario injected failures
-  - [ ] Add reset tests
+- [x] Milestone 3.5 - Scenario Reset System
+  - [x] Implement reset by scenario ID
+  - [x] Clear run-specific state
+  - [x] Load base fixtures
+  - [x] Apply scenario-specific initial state
+  - [x] Configure scenario injected failures
+  - [x] Add reset tests
 - [ ] Milestone 3.6 - Environment Inspection Helpers
   - [ ] Implement ticket inspection helpers
   - [ ] Implement customer inspection helpers
