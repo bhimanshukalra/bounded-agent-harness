@@ -67,14 +67,14 @@ Phase Two is complete when:
   - [x] Define default budgets
   - [x] Define feature flags
   - [x] Add config validation tests
-- [ ] Milestone 2.4 - Domain Enums
-  - [ ] Implement terminal states
-  - [ ] Implement permission levels
-  - [ ] Implement approval statuses
-  - [ ] Implement action types
-  - [ ] Implement error types
-  - [ ] Implement scenario difficulty/tags where useful
-  - [ ] Add enum stability tests
+- [x] Milestone 2.4 - Domain Enums
+  - [x] Implement terminal states
+  - [x] Implement permission levels
+  - [x] Implement approval statuses
+  - [x] Implement action types
+  - [x] Implement error types
+  - [x] Implement scenario difficulty/tags where useful
+  - [x] Add enum stability tests
 - [ ] Milestone 2.5 - Core Pydantic Models
   - [ ] Implement `Task`
   - [ ] Implement `Scenario`
