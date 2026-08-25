@@ -71,12 +71,12 @@ Phase Three is complete when:
   - [x] Include ambiguous-policy data
   - [x] Include prompt-injection ticket text
   - [x] Include approval approved/denied fixture hooks
-- [ ] Milestone 3.4 - Fixture Loader
-  - [ ] Implement fixture file loading
-  - [ ] Implement database seeding
-  - [ ] Validate fixture shape
-  - [ ] Make fixture loading deterministic
-  - [ ] Add fixture loader tests
+- [x] Milestone 3.4 - Fixture Loader
+  - [x] Implement fixture file loading
+  - [x] Implement database seeding
+  - [x] Validate fixture shape
+  - [x] Make fixture loading deterministic
+  - [x] Add fixture loader tests
 - [ ] Milestone 3.5 - Scenario Reset System
   - [ ] Implement reset by scenario ID
   - [ ] Clear run-specific state
