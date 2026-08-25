@@ -106,14 +106,14 @@ Phase Three is complete when:
   - [x] Return existing result for matching retries
   - [x] Return conflict for reused key with different args
   - [x] Add idempotency tests
-- [ ] Milestone 3.9 - Injected Failure Mechanism
-  - [ ] Define injected failure schema
-  - [ ] Load failures from scenario JSON
-  - [ ] Track remaining failure count
-  - [ ] Support timeout failure
-  - [ ] Support transient error
-  - [ ] Support transient error after side effect
-  - [ ] Add injected failure tests
+- [x] Milestone 3.9 - Injected Failure Mechanism
+  - [x] Define injected failure schema
+  - [x] Load failures from scenario JSON
+  - [x] Track remaining failure count
+  - [x] Support timeout failure
+  - [x] Support transient error
+  - [x] Support transient error after side effect
+  - [x] Add injected failure tests
 - [ ] Milestone 3.10 - Phase Four Readiness Review
   - [ ] Confirm mock database can be created
   - [ ] Confirm fixtures load
