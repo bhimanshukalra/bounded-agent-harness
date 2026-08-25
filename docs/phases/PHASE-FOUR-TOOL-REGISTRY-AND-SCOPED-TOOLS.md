@@ -65,13 +65,13 @@ Phase Four is complete when:
   - [x] Fetch tool specs by name
   - [x] List tools by permission level
   - [x] Add registry tests
-- [ ] Milestone 4.4 - Read-Only Inspection Tools
-  - [ ] Implement `fetch_ticket`
-  - [ ] Implement `fetch_customer`
-  - [ ] Implement `fetch_order`
-  - [ ] Implement `search_policy`
-  - [ ] Ensure read tools do not write audit events or mutations
-  - [ ] Add read tool tests
+- [x] Milestone 4.4 - Read-Only Inspection Tools
+  - [x] Implement `fetch_ticket`
+  - [x] Implement `fetch_customer`
+  - [x] Implement `fetch_order`
+  - [x] Implement `search_policy`
+  - [x] Ensure read tools do not write audit events or mutations
+  - [x] Add read tool tests
 - [ ] Milestone 4.5 - Policy Reasoning Tools
   - [ ] Implement `check_refund_policy`
   - [ ] Detect duplicate charge eligibility
@@ -353,6 +353,19 @@ Read-only tool implementations and tests.
 ### Acceptance Check
 
 The agent can inspect ticket, customer, order, charge, and policy facts without mutating state.
+
+### Implementation Note
+
+Milestone 4.4 introduced `src/bounded_agent/tools/read_tools.py` and attached executors for:
+
+- `fetch_ticket`
+- `fetch_customer`
+- `fetch_order`
+- `search_policy`
+
+These tools read through the Phase Three inspection helpers, return structured `not_found` errors
+for missing records, consume matching injected failures when `scenario_id` is present, and avoid
+audit, idempotency, and mutation writes.
 
 ## Milestone 4.5 - Policy Reasoning Tools
 

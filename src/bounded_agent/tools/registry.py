@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from bounded_agent.domain import ErrorType, PermissionLevel
 from bounded_agent.tools.execution import ToolExecutionContext, error_result
 from bounded_agent.tools.models import ToolCall, ToolResult, ToolSpec
+from bounded_agent.tools.read_tools import fetch_customer, fetch_order, fetch_ticket, search_policy
 from bounded_agent.tools.schemas import (
     AddTicketCommentInput,
     AddTicketCommentOutput,
@@ -304,16 +305,19 @@ DEFAULT_REGISTERED_TOOLS = [
         DEFAULT_TOOL_SPECS["fetch_customer"],
         FetchCustomerInput,
         FetchCustomerOutput,
+        executor=fetch_customer,
     ),
     registered_tool(
         DEFAULT_TOOL_SPECS["fetch_order"],
         FetchOrderInput,
         FetchOrderOutput,
+        executor=fetch_order,
     ),
     registered_tool(
         DEFAULT_TOOL_SPECS["fetch_ticket"],
         FetchTicketInput,
         FetchTicketOutput,
+        executor=fetch_ticket,
     ),
     registered_tool(
         DEFAULT_TOOL_SPECS["request_approval"],
@@ -324,6 +328,7 @@ DEFAULT_REGISTERED_TOOLS = [
         DEFAULT_TOOL_SPECS["search_policy"],
         SearchPolicyInput,
         SearchPolicyOutput,
+        executor=search_policy,
     ),
     registered_tool(
         DEFAULT_TOOL_SPECS["update_ticket_status"],
