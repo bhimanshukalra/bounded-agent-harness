@@ -107,13 +107,13 @@ Phase Two is complete when:
   - [x] Validate expected terminal states
   - [x] Validate expected/forbidden actions
   - [x] Add scenario schema tests
-- [ ] Milestone 2.9 - Basic CLI Skeleton
-  - [ ] Add CLI app
-  - [ ] Add `run-scenario` placeholder
-  - [ ] Add `run-eval` placeholder
-  - [ ] Add `reset-env` placeholder
-  - [ ] Add `show-trace` placeholder
-  - [ ] Verify CLI help works
+- [x] Milestone 2.9 - Basic CLI Skeleton
+  - [x] Add CLI app
+  - [x] Add `run-scenario` placeholder
+  - [x] Add `run-eval` placeholder
+  - [x] Add `reset-env` placeholder
+  - [x] Add `show-trace` placeholder
+  - [x] Verify CLI help works
 - [ ] Milestone 2.10 - Phase Three Readiness Review
   - [ ] Confirm scaffold imports cleanly
   - [ ] Confirm tests pass
