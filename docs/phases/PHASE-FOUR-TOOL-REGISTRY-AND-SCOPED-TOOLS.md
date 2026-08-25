@@ -52,12 +52,12 @@ Phase Four is complete when:
   - [x] Define tool execution outputs
   - [x] Define error handling contract
   - [x] Define environment connection strategy
-- [ ] Milestone 4.2 - Tool Schema Models
-  - [ ] Add typed input schemas
-  - [ ] Add typed output schemas
-  - [ ] Add shared context model for execution
-  - [ ] Add validation helpers
-  - [ ] Add schema tests
+- [x] Milestone 4.2 - Tool Schema Models
+  - [x] Add typed input schemas
+  - [x] Add typed output schemas
+  - [x] Add shared context model for execution
+  - [x] Add validation helpers
+  - [x] Add schema tests
 - [ ] Milestone 4.3 - Tool Registry
   - [ ] Define central registry module
   - [ ] Register all planned tool specs
@@ -259,6 +259,19 @@ Tool schema module and validation tests.
 ### Acceptance Check
 
 Invalid arguments fail before any environment state changes.
+
+### Implementation Note
+
+Milestone 4.2 introduced `src/bounded_agent/tools/schemas.py` with strict Pydantic input and
+output schemas for every planned Phase Four tool. The module also includes:
+
+- `ToolInputSchema`
+- `ToolOutputSchema`
+- `validate_tool_schema`
+- `validation_error_details`
+
+The shared execution context remains in `src/bounded_agent/tools/execution.py` from Milestone 4.1.
+Future registry code should use these schema helpers before invoking any environment operation.
 
 ## Milestone 4.3 - Tool Registry
 
