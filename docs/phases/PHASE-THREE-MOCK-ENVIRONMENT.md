@@ -84,13 +84,13 @@ Phase Three is complete when:
   - [x] Apply scenario-specific initial state
   - [x] Configure scenario injected failures
   - [x] Add reset tests
-- [ ] Milestone 3.6 - Environment Inspection Helpers
-  - [ ] Implement ticket inspection helpers
-  - [ ] Implement customer inspection helpers
-  - [ ] Implement order and charge inspection helpers
-  - [ ] Implement policy inspection helpers
-  - [ ] Implement final-state snapshot helper
-  - [ ] Add inspection tests
+- [x] Milestone 3.6 - Environment Inspection Helpers
+  - [x] Implement ticket inspection helpers
+  - [x] Implement customer inspection helpers
+  - [x] Implement order and charge inspection helpers
+  - [x] Implement policy inspection helpers
+  - [x] Implement final-state snapshot helper
+  - [x] Add inspection tests
 - [ ] Milestone 3.7 - Audit Log And Mutating Operation Primitives
   - [ ] Implement audit event writer
   - [ ] Implement internal ticket comment primitive
