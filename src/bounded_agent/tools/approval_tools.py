@@ -5,10 +5,12 @@ from typing import Any
 
 from bounded_agent.domain import ApprovalStatus, ErrorType
 from bounded_agent.state import (
+    consume_injected_failure,
     create_approval_request,
     get_idempotency_record,
     get_ticket,
     hash_arguments,
+    next_matching_failure,
     record_mock_refund,
     record_or_replay_idempotency,
 )
@@ -21,6 +23,7 @@ from bounded_agent.tools.execution import (
     success_result,
     tool_connection,
 )
+from bounded_agent.tools.failure_handling import injected_failure_result
 from bounded_agent.tools.models import ToolResult
 from bounded_agent.tools.schemas import (
     ApplyRefundInput,
@@ -122,6 +125,15 @@ def apply_refund(context: ToolExecutionContext, tool_input: StrictToolSchema) ->
         if isinstance(approval_result, ToolResult):
             return approval_result
 
+        pre_side_effect_failure = consume_pre_side_effect_failure(
+            connection,
+            context,
+            "apply_refund",
+            {"charge_id": typed_input.charge_id},
+        )
+        if pre_side_effect_failure is not None:
+            return pre_side_effect_failure
+
         try:
             refund = record_mock_refund(
                 connection,
@@ -154,6 +166,14 @@ def apply_refund(context: ToolExecutionContext, tool_input: StrictToolSchema) ->
             arguments=arguments,
             result=result,
         )
+        post_side_effect_failure = consume_post_side_effect_failure(
+            connection,
+            context,
+            "apply_refund",
+            {"charge_id": typed_input.charge_id},
+        )
+        if post_side_effect_failure is not None:
+            return post_side_effect_failure
 
     return success_result(result, metadata={"source": "mock_support_environment"})
 
@@ -240,6 +260,64 @@ def get_replay_or_conflict(
             "new_argument_hash": hash_arguments(arguments),
         },
     )
+
+
+def consume_pre_side_effect_failure(
+    connection: sqlite3.Connection,
+    context: ToolExecutionContext,
+    tool_name: str,
+    target: dict[str, Any],
+) -> ToolResult | None:
+    if context.scenario_id is None:
+        return None
+
+    failure = next_matching_failure(
+        connection,
+        scenario_id=context.scenario_id,
+        tool_name=tool_name,
+        target=target,
+    )
+    if failure is None or failure["failure_type"] == "transient_error_after_side_effect":
+        return None
+
+    consumed_failure = consume_injected_failure(
+        connection,
+        scenario_id=context.scenario_id,
+        tool_name=tool_name,
+        target=target,
+    )
+    if consumed_failure is None:
+        return None
+    return injected_failure_result(consumed_failure)
+
+
+def consume_post_side_effect_failure(
+    connection: sqlite3.Connection,
+    context: ToolExecutionContext,
+    tool_name: str,
+    target: dict[str, Any],
+) -> ToolResult | None:
+    if context.scenario_id is None:
+        return None
+
+    failure = next_matching_failure(
+        connection,
+        scenario_id=context.scenario_id,
+        tool_name=tool_name,
+        target=target,
+    )
+    if failure is None or failure["failure_type"] != "transient_error_after_side_effect":
+        return None
+
+    consumed_failure = consume_injected_failure(
+        connection,
+        scenario_id=context.scenario_id,
+        tool_name=tool_name,
+        target=target,
+    )
+    if consumed_failure is None:
+        return None
+    return injected_failure_result(consumed_failure)
 
 
 def require_approved_action(

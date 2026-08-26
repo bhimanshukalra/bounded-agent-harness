@@ -99,21 +99,21 @@ Phase Four is complete when:
   - [x] Reject reused keys with different arguments
   - [x] Prove `apply_refund` cannot duplicate side effects
   - [x] Add idempotency integration tests
-- [ ] Milestone 4.9 - Injected Failure Integration
-  - [ ] Check injected failures before read tool execution
-  - [ ] Support timeout errors
-  - [ ] Support transient errors
-  - [ ] Support post-side-effect transient errors
-  - [ ] Decrement failure counters exactly once
-  - [ ] Add injected failure tool tests
-- [ ] Milestone 4.10 - Tool Registry Readiness Review
-  - [ ] Confirm all planned tools are registered
-  - [ ] Confirm tool validation works
-  - [ ] Confirm permission enforcement works
-  - [ ] Confirm mutating tools are idempotent
-  - [ ] Confirm injected failures work through tools
-  - [ ] Confirm tests and lint pass
-  - [ ] Write Phase Four completion note
+- [x] Milestone 4.9 - Injected Failure Integration
+  - [x] Check injected failures before read tool execution
+  - [x] Support timeout errors
+  - [x] Support transient errors
+  - [x] Support post-side-effect transient errors
+  - [x] Decrement failure counters exactly once
+  - [x] Add injected failure tool tests
+- [x] Milestone 4.10 - Tool Registry Readiness Review
+  - [x] Confirm all planned tools are registered
+  - [x] Confirm tool validation works
+  - [x] Confirm permission enforcement works
+  - [x] Confirm mutating tools are idempotent
+  - [x] Confirm injected failures work through tools
+  - [x] Confirm tests and lint pass
+  - [x] Write Phase Four completion note
 
 ## Milestone 4.1 - Tool Boundary And Execution Contract
 
@@ -579,6 +579,16 @@ Injected failure integration tests through the public tool registry.
 
 `support_006` can force one `fetch_order` timeout, and `support_009` can force one post-side-effect transient refund error through actual tool execution.
 
+### Implementation Note
+
+Milestone 4.9 introduced shared injected-failure result mapping in
+`src/bounded_agent/tools/failure_handling.py` and completed registry-level failure integration.
+
+Read tools consume pre-execution failures before inspecting state. `apply_refund` consumes
+pre-side-effect failures before mutation and consumes `transient_error_after_side_effect` only after
+the refund and idempotency record are written. The post-side-effect failure is returned as a
+retryable `transient_error`, preserving the original injected failure type in error details.
+
 ## Milestone 4.10 - Tool Registry Readiness Review
 
 ### Objective
@@ -608,6 +618,23 @@ Phase Four completion note.
 ### Acceptance Check
 
 Phase Five can begin by making the agent loop call the tool registry for validated tool execution.
+
+### Completion Note
+
+Phase Four is complete. The tool layer now has strict schemas, an execution context, a central
+registry, registered specs for every planned scoped tool, read-only inspection tools, deterministic
+policy reasoning, draft-only response generation, low-risk audited comments, approval-gated
+consequential tools, mutating-tool idempotency, and injected failure handling through public registry
+execution.
+
+Readiness verification:
+
+- `uv run pytest` passed with 185 tests.
+- `uv run ruff check .` passed.
+- all planned Phase Four tools are registered in `build_default_registry`.
+
+Phase Five can now implement the bare bounded agent loop by calling the registry for validated tool
+execution instead of reaching into SQLite or tool internals directly.
 
 ## Phase Four Outputs
 

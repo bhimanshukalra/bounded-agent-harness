@@ -155,7 +155,6 @@ def test_apply_refund_replays_matching_retry_without_duplicate_refund(tmp_path):
         "apply_refund",
         arguments,
         run_id="support_009_run",
-        scenario_id="support_009",
         approval_id="support_009:approval:refund",
         idempotency_key="refund:key:009",
     )
@@ -164,7 +163,6 @@ def test_apply_refund_replays_matching_retry_without_duplicate_refund(tmp_path):
         "apply_refund",
         arguments,
         run_id="support_009_run",
-        scenario_id="support_009",
         approval_id="support_009:approval:refund",
         idempotency_key="refund:key:009",
     )
@@ -192,7 +190,6 @@ def test_apply_refund_conflicts_when_retry_arguments_change(tmp_path):
             "reason": "duplicate_charge",
         },
         run_id="support_009_run",
-        scenario_id="support_009",
         approval_id="support_009:approval:refund",
         idempotency_key="refund:key:009",
     )
@@ -207,7 +204,6 @@ def test_apply_refund_conflicts_when_retry_arguments_change(tmp_path):
             "reason": "duplicate_charge",
         },
         run_id="support_009_run",
-        scenario_id="support_009",
         approval_id="support_009:approval:refund",
         idempotency_key="refund:key:009",
     )

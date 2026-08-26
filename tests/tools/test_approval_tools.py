@@ -125,7 +125,6 @@ def test_apply_refund_executes_with_approved_fixture_and_writes_audit(tmp_path):
             "reason": "duplicate_charge",
         },
         run_id="support_009_run",
-        scenario_id="support_009",
         actor="agent",
         approval_id="support_009:approval:refund",
         idempotency_key="refund:key:009",

@@ -15,6 +15,7 @@ from bounded_agent.tools.execution import (
     success_result,
     tool_connection,
 )
+from bounded_agent.tools.failure_handling import injected_failure_result
 from bounded_agent.tools.models import ToolResult
 from bounded_agent.tools.schemas import (
     FetchCustomerInput,
@@ -126,23 +127,6 @@ def consume_read_failure(
         return None
 
     return injected_failure_result(failure)
-
-
-def injected_failure_result(failure: dict[str, Any]) -> ToolResult:
-    failure_type = ErrorType(failure["failure_type"])
-    retryable = failure_type in {ErrorType.TIMEOUT, ErrorType.TRANSIENT_ERROR}
-    return error_result(
-        failure_type,
-        failure["payload"].get("message", f"Injected {failure_type.value} failure."),
-        retryable=retryable,
-        details={
-            "failure_id": failure["failure_id"],
-            "tool_name": failure["tool_name"],
-            "remaining_count": failure["remaining_count"],
-            "target": failure["target"],
-        },
-        metadata={"source": "injected_failure"},
-    )
 
 
 def not_found_result(message: str, field_name: str, field_value: str) -> ToolResult:
