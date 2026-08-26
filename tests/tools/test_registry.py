@@ -84,25 +84,23 @@ def test_registry_validates_input_arguments_before_execution():
 
 
 def test_default_registry_returns_error_for_registered_tool_without_executor():
-    registry = build_default_registry()
-    call = ToolCall(
-        tool_name="request_approval",
-        arguments={
-            "ticket_id": "t_001",
-            "action_type": "apply_refund",
-            "target": {"charge_id": "ch_001_b"},
-            "proposed_arguments": {"amount": 49.0, "currency": "USD"},
-            "evidence_summary": ["Duplicate successful charges."],
-            "risk_summary": "Refund changes billing state.",
-        },
+    registry = ToolRegistry(
+        [
+            registered_tool(
+                DEFAULT_TOOL_SPECS["fetch_ticket"],
+                FetchTicketInput,
+                FetchTicketOutput,
+            )
+        ]
     )
+    call = ToolCall(tool_name="fetch_ticket", arguments={"ticket_id": "t_001"})
     context = ToolExecutionContext(run_id="run_001", connection=sqlite3.connect(":memory:"))
 
     result = registry.execute(call, context)
 
     assert result.ok is False
     assert result.error.type is ErrorType.UNRECOVERABLE
-    assert result.error.details == {"tool_name": "request_approval"}
+    assert result.error.details == {"tool_name": "fetch_ticket"}
 
 
 def test_registry_can_execute_registered_tool_with_valid_input_and_output():

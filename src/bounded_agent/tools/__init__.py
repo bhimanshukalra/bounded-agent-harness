@@ -1,3 +1,4 @@
+from bounded_agent.tools.approval_tools import apply_refund, request_approval, update_ticket_status
 from bounded_agent.tools.execution import (
     ToolExecutionContext,
     error_result,
@@ -81,6 +82,7 @@ __all__ = [
     "UpdateTicketStatusInput",
     "UpdateTicketStatusOutput",
     "add_ticket_comment",
+    "apply_refund",
     "build_default_registry",
     "check_refund_policy",
     "draft_customer_response",
@@ -89,9 +91,11 @@ __all__ = [
     "fetch_order",
     "fetch_ticket",
     "registered_tool",
+    "request_approval",
     "search_policy",
     "success_result",
     "tool_connection",
+    "update_ticket_status",
     "validate_tool_schema",
     "validation_error_details",
 ]

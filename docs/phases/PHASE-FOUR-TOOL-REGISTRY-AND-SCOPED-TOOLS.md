@@ -85,13 +85,13 @@ Phase Four is complete when:
   - [x] Ensure drafts are not sent externally
   - [x] Ensure comments write audit events
   - [x] Add draft and comment tests
-- [ ] Milestone 4.7 - Approval-Gated Tools
-  - [ ] Implement `request_approval`
-  - [ ] Implement approval lookup for approved/denied decisions
-  - [ ] Implement `apply_refund`
-  - [ ] Implement `update_ticket_status`
-  - [ ] Reject approval-required calls without durable approval
-  - [ ] Add approval-gated tool tests
+- [x] Milestone 4.7 - Approval-Gated Tools
+  - [x] Implement `request_approval`
+  - [x] Implement approval lookup for approved/denied decisions
+  - [x] Implement `apply_refund`
+  - [x] Implement `update_ticket_status`
+  - [x] Reject approval-required calls without durable approval
+  - [x] Add approval-gated tool tests
 - [ ] Milestone 4.8 - Idempotent Mutating Tool Execution
   - [ ] Require idempotency keys for mutating tools
   - [ ] Store argument hash and result payload
@@ -492,6 +492,19 @@ Approval-gated tool implementations and tests.
 ### Acceptance Check
 
 `apply_refund` and `update_ticket_status` cannot succeed based only on model text.
+
+### Implementation Note
+
+Milestone 4.7 introduced `src/bounded_agent/tools/approval_tools.py` and attached executors for:
+
+- `request_approval`
+- `apply_refund`
+- `update_ticket_status`
+
+`request_approval` creates a durable pending approval request and audit event. `apply_refund` and
+`update_ticket_status` require `context.approval_id`, load the approval from SQLite, reject missing,
+pending, denied, action-mismatched, target-mismatched, or argument-mismatched approvals, and only
+then mutate the environment through Phase Three audit primitives.
 
 ## Milestone 4.8 - Idempotent Mutating Tool Execution
 

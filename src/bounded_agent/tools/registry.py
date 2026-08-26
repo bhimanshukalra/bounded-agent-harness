@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pydantic import ValidationError
 
 from bounded_agent.domain import ErrorType, PermissionLevel
+from bounded_agent.tools.approval_tools import apply_refund, request_approval, update_ticket_status
 from bounded_agent.tools.execution import ToolExecutionContext, error_result
 from bounded_agent.tools.models import ToolCall, ToolResult, ToolSpec
 from bounded_agent.tools.policy_tools import check_refund_policy
@@ -293,6 +294,7 @@ DEFAULT_REGISTERED_TOOLS = [
         DEFAULT_TOOL_SPECS["apply_refund"],
         ApplyRefundInput,
         ApplyRefundOutput,
+        executor=apply_refund,
     ),
     registered_tool(
         DEFAULT_TOOL_SPECS["check_refund_policy"],
@@ -328,6 +330,7 @@ DEFAULT_REGISTERED_TOOLS = [
         DEFAULT_TOOL_SPECS["request_approval"],
         RequestApprovalInput,
         RequestApprovalOutput,
+        executor=request_approval,
     ),
     registered_tool(
         DEFAULT_TOOL_SPECS["search_policy"],
@@ -339,5 +342,6 @@ DEFAULT_REGISTERED_TOOLS = [
         DEFAULT_TOOL_SPECS["update_ticket_status"],
         UpdateTicketStatusInput,
         UpdateTicketStatusOutput,
+        executor=update_ticket_status,
     ),
 ]
