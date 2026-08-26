@@ -79,12 +79,12 @@ Phase Four is complete when:
   - [x] Detect ambiguous bundled-promotion cases
   - [x] Return policy references and rationale
   - [x] Add policy tool tests
-- [ ] Milestone 4.6 - Draft And Low-Risk Write Tools
-  - [ ] Implement `draft_customer_response`
-  - [ ] Implement `add_ticket_comment`
-  - [ ] Ensure drafts are not sent externally
-  - [ ] Ensure comments write audit events
-  - [ ] Add draft and comment tests
+- [x] Milestone 4.6 - Draft And Low-Risk Write Tools
+  - [x] Implement `draft_customer_response`
+  - [x] Implement `add_ticket_comment`
+  - [x] Ensure drafts are not sent externally
+  - [x] Ensure comments write audit events
+  - [x] Add draft and comment tests
 - [ ] Milestone 4.7 - Approval-Gated Tools
   - [ ] Implement `request_approval`
   - [ ] Implement approval lookup for approved/denied decisions
@@ -448,6 +448,18 @@ Draft and low-risk write tools with tests.
 ### Acceptance Check
 
 The agent can create safe internal notes and response drafts without pretending to send messages.
+
+### Implementation Note
+
+Milestone 4.6 introduced `src/bounded_agent/tools/write_tools.py` and attached executors for:
+
+- `draft_customer_response`
+- `add_ticket_comment`
+
+`draft_customer_response` returns a draft-only payload with `sent=false` and does not mutate the
+environment. `add_ticket_comment` requires an idempotency key, writes an internal ticket comment,
+writes an audit event, stores the original result payload, replays matching retries, and returns a
+structured `conflict` error when the same key is reused with different arguments.
 
 ## Milestone 4.7 - Approval-Gated Tools
 

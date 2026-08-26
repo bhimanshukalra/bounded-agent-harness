@@ -43,6 +43,7 @@ from bounded_agent.tools.schemas import (
     validate_tool_schema,
     validation_error_details,
 )
+from bounded_agent.tools.write_tools import add_ticket_comment, draft_customer_response
 
 __all__ = [
     "DEFAULT_REGISTERED_TOOLS",
@@ -79,8 +80,10 @@ __all__ = [
     "ToolSpec",
     "UpdateTicketStatusInput",
     "UpdateTicketStatusOutput",
+    "add_ticket_comment",
     "build_default_registry",
     "check_refund_policy",
+    "draft_customer_response",
     "error_result",
     "fetch_customer",
     "fetch_order",

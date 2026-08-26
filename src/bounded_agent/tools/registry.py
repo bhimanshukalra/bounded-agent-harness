@@ -33,6 +33,7 @@ from bounded_agent.tools.schemas import (
     validate_tool_schema,
     validation_error_details,
 )
+from bounded_agent.tools.write_tools import add_ticket_comment, draft_customer_response
 
 ToolExecutor = Callable[[ToolExecutionContext, StrictToolSchema], ToolResult]
 
@@ -286,6 +287,7 @@ DEFAULT_REGISTERED_TOOLS = [
         DEFAULT_TOOL_SPECS["add_ticket_comment"],
         AddTicketCommentInput,
         AddTicketCommentOutput,
+        executor=add_ticket_comment,
     ),
     registered_tool(
         DEFAULT_TOOL_SPECS["apply_refund"],
@@ -302,6 +304,7 @@ DEFAULT_REGISTERED_TOOLS = [
         DEFAULT_TOOL_SPECS["draft_customer_response"],
         DraftCustomerResponseInput,
         DraftCustomerResponseOutput,
+        executor=draft_customer_response,
     ),
     registered_tool(
         DEFAULT_TOOL_SPECS["fetch_customer"],
