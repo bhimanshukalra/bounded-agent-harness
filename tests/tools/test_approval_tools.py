@@ -198,6 +198,7 @@ def test_update_ticket_status_executes_with_matching_approved_action(tmp_path):
         {"ticket_id": "t_001", "status": "resolved"},
         scenario_id="support_001",
         approval_id="approval_status_001",
+        idempotency_key="status:key:001",
     )
 
     assert result.ok is True
@@ -228,6 +229,7 @@ def test_update_ticket_status_rejects_pending_approval(tmp_path):
         {"ticket_id": "t_001", "status": "resolved"},
         scenario_id="support_001",
         approval_id="approval_status_001",
+        idempotency_key="status:key:001",
     )
 
     assert result.ok is False

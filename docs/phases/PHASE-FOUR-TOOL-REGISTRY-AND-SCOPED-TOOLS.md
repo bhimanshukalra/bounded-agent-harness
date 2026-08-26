@@ -92,13 +92,13 @@ Phase Four is complete when:
   - [x] Implement `update_ticket_status`
   - [x] Reject approval-required calls without durable approval
   - [x] Add approval-gated tool tests
-- [ ] Milestone 4.8 - Idempotent Mutating Tool Execution
-  - [ ] Require idempotency keys for mutating tools
-  - [ ] Store argument hash and result payload
-  - [ ] Replay matching retries
-  - [ ] Reject reused keys with different arguments
-  - [ ] Prove `apply_refund` cannot duplicate side effects
-  - [ ] Add idempotency integration tests
+- [x] Milestone 4.8 - Idempotent Mutating Tool Execution
+  - [x] Require idempotency keys for mutating tools
+  - [x] Store argument hash and result payload
+  - [x] Replay matching retries
+  - [x] Reject reused keys with different arguments
+  - [x] Prove `apply_refund` cannot duplicate side effects
+  - [x] Add idempotency integration tests
 - [ ] Milestone 4.9 - Injected Failure Integration
   - [ ] Check injected failures before read tool execution
   - [ ] Support timeout errors
@@ -534,6 +534,19 @@ Idempotency integration and tests.
 ### Acceptance Check
 
 Scenario `support_009` can retry `apply_refund` without creating a duplicate refund.
+
+### Implementation Note
+
+Milestone 4.8 completed idempotency integration for mutating tools:
+
+- `request_approval`
+- `apply_refund`
+- `add_ticket_comment`
+- `update_ticket_status`
+
+Each mutating tool requires an idempotency key, stores the original argument hash and result payload,
+replays matching retries, and returns `conflict` when the same key is reused with different
+arguments. `apply_refund` retries now return the original result without applying a duplicate refund.
 
 ## Milestone 4.9 - Injected Failure Integration
 

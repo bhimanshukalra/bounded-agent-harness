@@ -6,11 +6,21 @@ from typing import Any
 from bounded_agent.domain import ApprovalStatus, ErrorType
 from bounded_agent.state import (
     create_approval_request,
+    get_idempotency_record,
     get_ticket,
+    hash_arguments,
     record_mock_refund,
+    record_or_replay_idempotency,
+)
+from bounded_agent.state import (
     update_ticket_status as update_ticket_status_record,
 )
-from bounded_agent.tools.execution import ToolExecutionContext, error_result, success_result, tool_connection
+from bounded_agent.tools.execution import (
+    ToolExecutionContext,
+    error_result,
+    success_result,
+    tool_connection,
+)
 from bounded_agent.tools.models import ToolResult
 from bounded_agent.tools.schemas import (
     ApplyRefundInput,
@@ -22,15 +32,21 @@ from bounded_agent.tools.schemas import (
 
 def request_approval(context: ToolExecutionContext, tool_input: StrictToolSchema) -> ToolResult:
     typed_input = expect_input(tool_input, RequestApprovalInput)
+    if context.idempotency_key is None:
+        return missing_idempotency_key_result("request_approval")
+
+    arguments = typed_input.model_dump()
     with tool_connection(context) as connection:
         ticket = get_ticket(connection, typed_input.ticket_id)
         if ticket is None:
             return not_found_result("Ticket was not found.", "ticket_id", typed_input.ticket_id)
+        replay_or_conflict = get_replay_or_conflict(connection, context, arguments)
+        if replay_or_conflict is not None:
+            return replay_or_conflict
 
         approval_id = stable_id(
             "approval",
-            context.idempotency_key
-            or f"{context.run_id}:{typed_input.ticket_id}:{typed_input.action_type}:{typed_input.target}",
+            context.idempotency_key,
         )
         approval = create_approval_request(
             connection,
@@ -45,24 +61,43 @@ def request_approval(context: ToolExecutionContext, tool_input: StrictToolSchema
             risk_summary=typed_input.risk_summary,
             actor=context.actor,
         )
-
-    return success_result(
-        {
+        result = {
             "approval_id": approval["approval_id"],
             "status": approval["status"],
             "ticket_id": approval["ticket_id"],
             "action_type": approval["action_type"],
-        },
-        metadata={"source": "mock_support_environment"},
-    )
+        }
+        record_or_replay_idempotency(
+            connection,
+            idempotency_key=context.idempotency_key,
+            run_id=context.run_id,
+            tool_name="request_approval",
+            target_type="ticket",
+            target_id=typed_input.ticket_id,
+            arguments=arguments,
+            result=result,
+        )
+
+    return success_result(result, metadata={"source": "mock_support_environment"})
 
 
 def apply_refund(context: ToolExecutionContext, tool_input: StrictToolSchema) -> ToolResult:
     typed_input = expect_input(tool_input, ApplyRefundInput)
     if context.idempotency_key is None:
         return missing_idempotency_key_result("apply_refund")
+    if context.approval_id is None:
+        return error_result(
+            ErrorType.PERMISSION_DENIED,
+            "Approval-required tool needs a durable approval_id.",
+            details={"action_type": "apply_refund"},
+        )
 
+    arguments = typed_input.model_dump()
     with tool_connection(context) as connection:
+        replay_or_conflict = get_replay_or_conflict(connection, context, arguments)
+        if replay_or_conflict is not None:
+            return replay_or_conflict
+
         charge = get_charge(connection, typed_input.charge_id)
         if charge is None:
             return not_found_result("Charge was not found.", "charge_id", typed_input.charge_id)
@@ -101,23 +136,45 @@ def apply_refund(context: ToolExecutionContext, tool_input: StrictToolSchema) ->
             if "does not exist" in str(exc):
                 return not_found_result("Charge was not found.", "charge_id", typed_input.charge_id)
             return error_result(ErrorType.VALIDATION_ERROR, str(exc))
-
-    return success_result(
-        {
+        result = {
             "charge_id": refund["charge_id"],
             "order_id": refund["order_id"],
             "amount": refund["amount"],
             "currency": refund["currency"],
             "status": refund["status"],
             "idempotency_key": context.idempotency_key,
-        },
-        metadata={"source": "mock_support_environment"},
-    )
+        }
+        record_or_replay_idempotency(
+            connection,
+            idempotency_key=context.idempotency_key,
+            run_id=context.run_id,
+            tool_name="apply_refund",
+            target_type="charge",
+            target_id=typed_input.charge_id,
+            arguments=arguments,
+            result=result,
+        )
+
+    return success_result(result, metadata={"source": "mock_support_environment"})
 
 
 def update_ticket_status(context: ToolExecutionContext, tool_input: StrictToolSchema) -> ToolResult:
     typed_input = expect_input(tool_input, UpdateTicketStatusInput)
+    if context.idempotency_key is None:
+        return missing_idempotency_key_result("update_ticket_status")
+    if context.approval_id is None:
+        return error_result(
+            ErrorType.PERMISSION_DENIED,
+            "Approval-required tool needs a durable approval_id.",
+            details={"action_type": "update_ticket_status"},
+        )
+
+    arguments = typed_input.model_dump()
     with tool_connection(context) as connection:
+        replay_or_conflict = get_replay_or_conflict(connection, context, arguments)
+        if replay_or_conflict is not None:
+            return replay_or_conflict
+
         approval_result = require_approved_action(
             connection,
             context,
@@ -139,14 +196,49 @@ def update_ticket_status(context: ToolExecutionContext, tool_input: StrictToolSc
             )
         except ValueError:
             return not_found_result("Ticket was not found.", "ticket_id", typed_input.ticket_id)
-
-    return success_result(
-        {
+        result = {
             "ticket_id": updated["ticket_id"],
             "status": updated["status"],
             "updated_at": updated["updated_at"],
+        }
+        record_or_replay_idempotency(
+            connection,
+            idempotency_key=context.idempotency_key,
+            run_id=context.run_id,
+            tool_name="update_ticket_status",
+            target_type="ticket",
+            target_id=typed_input.ticket_id,
+            arguments=arguments,
+            result=result,
+        )
+
+    return success_result(result, metadata={"source": "mock_support_environment"})
+
+
+def get_replay_or_conflict(
+    connection: sqlite3.Connection,
+    context: ToolExecutionContext,
+    arguments: dict[str, Any],
+) -> ToolResult | None:
+    if context.idempotency_key is None:
+        return None
+
+    existing_record = get_idempotency_record(connection, context.idempotency_key)
+    if existing_record is None:
+        return None
+    if existing_record["argument_hash"] == hash_arguments(arguments):
+        return success_result(
+            existing_record["result"],
+            metadata={"source": "idempotency_replay"},
+        )
+    return error_result(
+        ErrorType.CONFLICT,
+        "Idempotency key was reused with different arguments.",
+        details={
+            "idempotency_key": context.idempotency_key,
+            "original_argument_hash": existing_record["argument_hash"],
+            "new_argument_hash": hash_arguments(arguments),
         },
-        metadata={"source": "mock_support_environment"},
     )
 
 
