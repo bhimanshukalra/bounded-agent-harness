@@ -46,6 +46,16 @@ def test_run_eval_placeholder_validates_scenario_directory():
     assert "run-eval is not implemented yet" in result.output
 
 
+def test_demo_shows_bounded_workflow():
+    result = CliRunner().invoke(app, ["demo"])
+
+    assert result.exit_code == 0
+    assert "Bounded support-resolution demo" in result.output
+    assert "Scenario: support_001" in result.output
+    assert "request approval before applying any refund" in result.output
+    assert "reports/demo-trace.md" in result.output
+
+
 def test_reset_env_placeholder():
     result = CliRunner().invoke(app, ["reset-env"])
 

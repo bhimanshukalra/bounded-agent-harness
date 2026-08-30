@@ -1,7 +1,7 @@
 [project]
 name = "bounded-agent-harness"
 version = "0.1.0"
-description = "A bounded support-resolution agent harness with typed tools, durable state, traces, approvals, and evals."
+description = "Bounded support-resolution agent harness with typed tools, durable state, approvals, traces, and evals."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

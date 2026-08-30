@@ -45,6 +45,26 @@ def run_eval() -> None:
     console.print("run-eval is not implemented yet")
 
 
+@app.command("demo")
+def demo() -> None:
+    """Show the deterministic duplicate-charge demo workflow."""
+    settings = load_settings()
+    scenario = load_scenario("support_001", settings)
+    trace_path = settings.project_root / "reports" / "demo-trace.md"
+
+    console.print("[bold]Bounded support-resolution demo[/bold]")
+    console.print(f"Scenario: {scenario.id}")
+    console.print(f"Task: {scenario.task}")
+    console.print("Workflow:")
+    console.print(
+        "Support ticket -> inspect account state -> propose safe action -> "
+        "request approval when needed -> apply bounded tool call -> write trace/report."
+    )
+    console.print(f"Expected terminal state: {scenario.expected_terminal_state.value}")
+    console.print("Expected bounded behavior: request approval before applying any refund.")
+    console.print(f"Trace/report: {trace_path}")
+
+
 @app.command("reset-env")
 def reset_env() -> None:
     """Placeholder for deterministic mock environment reset."""
