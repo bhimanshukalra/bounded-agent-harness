@@ -16,9 +16,23 @@ from bounded_agent.domain import (
     TerminalState,
 )
 from bounded_agent.evals import load_scenario
-from bounded_agent.loop.actions import ActionDecision, TerminalStateAction
+from bounded_agent.loop.actions import (
+    ActionDecision,
+    ApprovalRequestAction,
+    ReplanAction,
+    RetryAction,
+    TerminalStateAction,
+    ToolCallAction,
+)
 from bounded_agent.state import ResetResult, reset_scenario_environment
-from bounded_agent.tools import Observation, ToolRegistry, ToolSpec, build_default_registry
+from bounded_agent.tools import (
+    Observation,
+    ToolCall,
+    ToolRegistry,
+    ToolResult,
+    ToolSpec,
+    build_default_registry,
+)
 
 SAFETY_CONSTRAINTS = (
     "Use only registered tools supplied in this context.",
@@ -40,6 +54,13 @@ class ModelDecisionClient(Protocol):
 
 class DecisionParseError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class ActionValidationResult:
+    valid: bool
+    tool_name: str
+    errors: Sequence[str] = field(default_factory=tuple)
 
 
 class DeterministicDecisionSource:
@@ -219,8 +240,11 @@ class AgentRunner:
             db_path=reset_result.db_path if reset_result is not None else None,
         )
         decision = self.decision_source.decide(context)
+        validation = validate_action_decision(decision, self.registry)
 
-        if isinstance(decision.action, TerminalStateAction):
+        if not validation.valid:
+            terminal_result = self._invalid_action_result(request, state, validation)
+        elif isinstance(decision.action, TerminalStateAction):
             terminal_result = self._terminal_result_from_action(request, state, decision.action)
         else:
             terminal_result = self._unsupported_action_result(request, state, decision)
@@ -272,6 +296,26 @@ class AgentRunner:
             trace_event_id=f"trace_{uuid4().hex}",
         )
 
+    def _invalid_action_result(
+        self,
+        request: RunnerRequest,
+        state: AgentState,
+        validation: ActionValidationResult,
+    ) -> TerminalResult:
+        return TerminalResult(
+            run_id=request.run_id,
+            scenario_id=request.scenario_id,
+            ticket_id=request.ticket_id,
+            terminal_state=TerminalState.FAILED_INVALID_TOOL_CALL,
+            summary="Action decision failed validation before execution.",
+            actions_taken=state.completed_actions,
+            budget_usage=state.budget_usage,
+            trace_path=self.config.trace_path,
+            tool_name=validation.tool_name,
+            validation_errors=list(validation.errors),
+            retry_count=0,
+        )
+
 
 def scenario_ticket_id(scenario: Scenario) -> str:
     ticket_id = scenario.initial_state.get("ticket_id")
@@ -289,6 +333,128 @@ def parse_action_decision(raw_decision: ActionDecision | dict[str, Any] | str) -
         return ActionDecision.model_validate(raw_decision)
     except ValidationError as exc:
         raise DecisionParseError(f"invalid action decision: {exc}") from exc
+
+
+def validate_action_decision(
+    decision: ActionDecision,
+    registry: ToolRegistry,
+) -> ActionValidationResult:
+    action = decision.action
+    if isinstance(action, ToolCallAction):
+        return validate_tool_call_action(action, registry)
+    if isinstance(action, ApprovalRequestAction):
+        return validate_approval_request_action(action, registry)
+    if isinstance(action, TerminalStateAction):
+        return validate_terminal_state_action(action)
+    if isinstance(action, RetryAction):
+        return validate_retry_action(action, registry)
+    if isinstance(action, ReplanAction):
+        return ActionValidationResult(valid=True, tool_name="replan")
+
+    return ActionValidationResult(
+        valid=False,
+        tool_name="unknown",
+        errors=(f"unsupported action type: {action.type}",),
+    )
+
+
+def validate_tool_call_action(
+    action: ToolCallAction,
+    registry: ToolRegistry,
+) -> ActionValidationResult:
+    parsed = registry.validate_call(ToolCall(tool_name=action.tool_name, arguments=action.arguments))
+    if isinstance(parsed, ToolResult):
+        return ActionValidationResult(
+            valid=False,
+            tool_name=action.tool_name,
+            errors=tool_result_validation_errors(parsed),
+        )
+    return ActionValidationResult(valid=True, tool_name=action.tool_name)
+
+
+def validate_approval_request_action(
+    action: ApprovalRequestAction,
+    registry: ToolRegistry,
+) -> ActionValidationResult:
+    try:
+        spec = registry.get_spec(action.action_type)
+    except KeyError:
+        return ActionValidationResult(
+            valid=False,
+            tool_name=action.action_type,
+            errors=(f"unknown approval action: {action.action_type}",),
+        )
+
+    if not spec.approval_required:
+        return ActionValidationResult(
+            valid=False,
+            tool_name=action.action_type,
+            errors=(f"action does not require approval: {action.action_type}",),
+        )
+
+    return ActionValidationResult(valid=True, tool_name=action.action_type)
+
+
+def validate_terminal_state_action(action: TerminalStateAction) -> ActionValidationResult:
+    try:
+        TerminalResult(
+            run_id="validation",
+            ticket_id="validation",
+            terminal_state=action.terminal_state,
+            summary=action.summary,
+            budget_usage=BudgetUsage(),
+            trace_path=Path("validation.trace"),
+            **action.fields,
+        )
+    except ValidationError as exc:
+        return ActionValidationResult(
+            valid=False,
+            tool_name="set_terminal_state",
+            errors=validation_error_messages(exc),
+        )
+
+    return ActionValidationResult(valid=True, tool_name="set_terminal_state")
+
+
+def validate_retry_action(
+    action: RetryAction,
+    registry: ToolRegistry,
+) -> ActionValidationResult:
+    try:
+        registry.get_spec(action.failed_tool)
+    except KeyError:
+        return ActionValidationResult(
+            valid=False,
+            tool_name=action.failed_tool,
+            errors=(f"unknown retry tool: {action.failed_tool}",),
+        )
+
+    if action.corrected_arguments is None:
+        return ActionValidationResult(valid=True, tool_name=action.failed_tool)
+
+    parsed = registry.validate_call(
+        ToolCall(tool_name=action.failed_tool, arguments=action.corrected_arguments)
+    )
+    if isinstance(parsed, ToolResult):
+        return ActionValidationResult(
+            valid=False,
+            tool_name=action.failed_tool,
+            errors=tool_result_validation_errors(parsed),
+        )
+    return ActionValidationResult(valid=True, tool_name=action.failed_tool)
+
+
+def tool_result_validation_errors(result: ToolResult) -> tuple[str, ...]:
+    if result.error is None:
+        return ("tool validation failed without a structured error",)
+    fields = result.error.details.get("fields")
+    if fields:
+        return tuple(f"{result.error.message}: {field}" for field in fields)
+    return (result.error.message,)
+
+
+def validation_error_messages(error: ValidationError) -> tuple[str, ...]:
+    return tuple(str(item["msg"]) for item in error.errors())
 
 
 def build_bounded_context(

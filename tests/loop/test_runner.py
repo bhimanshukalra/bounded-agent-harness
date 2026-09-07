@@ -16,6 +16,7 @@ from bounded_agent.loop import (
     build_bounded_context,
     parse_action_decision,
     scenario_ticket_id,
+    validate_action_decision,
 )
 from bounded_agent.state import connect_database
 from bounded_agent.tools import ToolResult, build_default_registry
@@ -97,6 +98,32 @@ def test_runner_fails_closed_for_non_terminal_actions_until_execution_is_impleme
     assert "tool_call" in result.terminal_result.error_summary
     assert result.terminal_result.last_successful_step == 0
     assert result.terminal_result.trace_event_id.startswith("trace_")
+
+
+def test_runner_stops_with_invalid_tool_call_for_failed_action_validation():
+    decision = ActionDecision(
+        thought_summary="Fetch the ticket.",
+        action={
+            "type": "tool_call",
+            "tool_name": "fetch_ticket",
+            "arguments": {},
+        },
+        safety_check={
+            "permission_level": "read_only",
+            "approval_required": False,
+        },
+    )
+    runner = AgentRunner(
+        StaticDecisionSource(decision),
+        config=RunnerConfig(trace_path=Path("data/runs/run_001/trace.jsonl")),
+    )
+
+    result = runner.run(runner_request())
+
+    assert result.terminal_result.terminal_state is TerminalState.FAILED_INVALID_TOOL_CALL
+    assert result.terminal_result.tool_name == "fetch_ticket"
+    assert result.terminal_result.retry_count == 0
+    assert result.terminal_result.validation_errors == ["Tool input failed validation.: ticket_id"]
 
 
 def test_runner_request_rejects_blank_run_id():
@@ -291,6 +318,164 @@ def test_model_backed_decision_source_passes_bounded_payload_to_client():
 
     assert decision.action.terminal_state is TerminalState.RESOLVED
     assert client.seen_payloads == [context.bounded_context.to_decision_payload()]
+
+
+def test_validate_action_decision_accepts_valid_tool_call():
+    decision = ActionDecision(
+        thought_summary="Fetch the ticket.",
+        action={
+            "type": "tool_call",
+            "tool_name": "fetch_ticket",
+            "arguments": {"ticket_id": "t_001"},
+        },
+        safety_check={
+            "permission_level": "read_only",
+            "approval_required": False,
+        },
+    )
+
+    validation = validate_action_decision(decision, build_default_registry())
+
+    assert validation.valid is True
+    assert validation.tool_name == "fetch_ticket"
+    assert validation.errors == ()
+
+
+def test_validate_action_decision_rejects_unknown_tool_call():
+    decision = ActionDecision(
+        thought_summary="Try an unknown tool.",
+        action={
+            "type": "tool_call",
+            "tool_name": "run_shell",
+            "arguments": {},
+        },
+        safety_check={
+            "permission_level": "read_only",
+            "approval_required": False,
+        },
+    )
+
+    validation = validate_action_decision(decision, build_default_registry())
+
+    assert validation.valid is False
+    assert validation.tool_name == "run_shell"
+    assert validation.errors == ("Unknown tool.",)
+
+
+def test_validate_action_decision_rejects_invalid_tool_arguments():
+    decision = ActionDecision(
+        thought_summary="Fetch without required input.",
+        action={
+            "type": "tool_call",
+            "tool_name": "fetch_ticket",
+            "arguments": {},
+        },
+        safety_check={
+            "permission_level": "read_only",
+            "approval_required": False,
+        },
+    )
+
+    validation = validate_action_decision(decision, build_default_registry())
+
+    assert validation.valid is False
+    assert validation.tool_name == "fetch_ticket"
+    assert validation.errors == ("Tool input failed validation.: ticket_id",)
+
+
+def test_validate_action_decision_accepts_approval_request_for_approval_required_tool():
+    decision = ActionDecision(
+        thought_summary="Need approval before refund.",
+        action={
+            "type": "request_approval",
+            "action_type": "apply_refund",
+            "target": {"ticket_id": "t_001"},
+            "proposed_arguments": {"charge_id": "ch_001_b"},
+            "evidence_summary": ["Duplicate successful charge confirmed."],
+            "risk_summary": "Refund mutates billing state.",
+        },
+        safety_check={
+            "permission_level": "approval_required",
+            "approval_required": True,
+        },
+    )
+
+    validation = validate_action_decision(decision, build_default_registry())
+
+    assert validation.valid is True
+    assert validation.tool_name == "apply_refund"
+
+
+def test_validate_action_decision_rejects_approval_request_for_non_approval_tool():
+    decision = ActionDecision(
+        thought_summary="Ask approval for a read.",
+        action={
+            "type": "request_approval",
+            "action_type": "fetch_ticket",
+            "target": {"ticket_id": "t_001"},
+            "proposed_arguments": {"ticket_id": "t_001"},
+            "evidence_summary": ["Need ticket details."],
+            "risk_summary": "Read-only operation.",
+        },
+        safety_check={
+            "permission_level": "read_only",
+            "approval_required": False,
+        },
+    )
+
+    validation = validate_action_decision(decision, build_default_registry())
+
+    assert validation.valid is False
+    assert validation.tool_name == "fetch_ticket"
+    assert validation.errors == ("action does not require approval: fetch_ticket",)
+
+
+def test_validate_action_decision_rejects_terminal_action_missing_state_fields():
+    decision = ActionDecision(
+        thought_summary="Stop too early.",
+        action={
+            "type": "set_terminal_state",
+            "terminal_state": "resolved",
+            "summary": "Resolved.",
+            "fields": {},
+        },
+        safety_check={
+            "permission_level": "low_risk_write",
+            "approval_required": False,
+        },
+    )
+
+    validation = validate_action_decision(decision, build_default_registry())
+
+    assert validation.valid is False
+    assert validation.tool_name == "set_terminal_state"
+    assert validation.errors == (
+        (
+            "Value error, resolved requires fields: resolution_summary, "
+            "final_ticket_status, environment_changes"
+        ),
+    )
+
+
+def test_validate_action_decision_rejects_retry_for_unknown_tool():
+    decision = ActionDecision(
+        thought_summary="Retry a missing tool.",
+        action={
+            "type": "retry",
+            "failed_tool": "missing_tool",
+            "error_type": "timeout",
+        },
+        safety_check={
+            "permission_level": "read_only",
+            "approval_required": False,
+        },
+    )
+
+    validation = validate_action_decision(decision, build_default_registry())
+
+    assert validation.valid is False
+    assert validation.tool_name == "missing_tool"
+    assert validation.errors == ("unknown retry tool: missing_tool",)
 
 
 def runner_request() -> RunnerRequest:

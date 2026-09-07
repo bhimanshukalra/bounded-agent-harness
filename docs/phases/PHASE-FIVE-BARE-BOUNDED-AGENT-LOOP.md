@@ -80,13 +80,13 @@ Phase Five is complete when:
   - [x] Parse structured action decisions
   - [x] Reject malformed decisions
   - [x] Add parser tests
-- [ ] Milestone 5.5 - Action Validation
-  - [ ] Validate action type
-  - [ ] Validate tool call name against registry
-  - [ ] Validate tool arguments through registry
-  - [ ] Validate approval request actions
-  - [ ] Validate terminal-state actions
-  - [ ] Add action validation tests
+- [x] Milestone 5.5 - Action Validation
+  - [x] Validate action type
+  - [x] Validate tool call name against registry
+  - [x] Validate tool arguments through registry
+  - [x] Validate approval request actions
+  - [x] Validate terminal-state actions
+  - [x] Add action validation tests
 - [ ] Milestone 5.6 - Tool Execution Integration
   - [ ] Build tool execution context
   - [ ] Execute tools through registry only

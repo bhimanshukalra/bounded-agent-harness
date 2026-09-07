@@ -8,6 +8,7 @@ from bounded_agent.loop.actions import (
     ToolCallAction,
 )
 from bounded_agent.loop.runner import (
+    ActionValidationResult,
     AgentRunner,
     BoundedContext,
     DecisionParseError,
@@ -22,10 +23,12 @@ from bounded_agent.loop.runner import (
     build_bounded_context,
     parse_action_decision,
     scenario_ticket_id,
+    validate_action_decision,
 )
 
 __all__ = [
     "ActionDecision",
+    "ActionValidationResult",
     "AgentRunner",
     "ApprovalRequestAction",
     "BoundedContext",
@@ -46,4 +49,5 @@ __all__ = [
     "build_bounded_context",
     "parse_action_decision",
     "scenario_ticket_id",
+    "validate_action_decision",
 ]
