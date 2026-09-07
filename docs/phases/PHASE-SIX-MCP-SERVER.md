@@ -71,20 +71,20 @@ Phase Six is complete when:
   - [x] Load settings and fixture paths
   - [x] Return health or capability metadata
   - [x] Add server construction tests
-- [ ] Milestone 6.4 - Policy And Knowledge Handlers
+- [x] Milestone 6.4 - Policy And Knowledge Handlers
   - [x] Implement `search_knowledge_base`
   - [x] Implement `get_policy_detail`
   - [x] Serve data from policy fixtures or SQLite
   - [x] Normalize matching and response ordering
   - [x] Return structured not-found errors
   - [x] Add handler tests
-- [ ] Milestone 6.5 - MCP Client Wrapper
-  - [ ] Add tool-layer MCP client interface
-  - [ ] Add local in-process client for tests
-  - [ ] Translate MCP responses into `ToolResult`
-  - [ ] Translate MCP errors into structured tool errors
-  - [ ] Keep registry-facing schemas stable
-  - [ ] Add client wrapper tests
+- [x] Milestone 6.5 - MCP Client Wrapper
+  - [x] Add tool-layer MCP client interface
+  - [x] Add local in-process client for tests
+  - [x] Translate MCP responses into `ToolResult`
+  - [x] Translate MCP errors into structured tool errors
+  - [x] Keep registry-facing schemas stable
+  - [x] Add client wrapper tests
 - [ ] Milestone 6.6 - Tool Registry Integration
   - [ ] Route `search_policy` or `search_knowledge_base` through MCP
   - [ ] Preserve permission level as `read_only`
@@ -272,6 +272,12 @@ Give the tool layer a narrow way to call MCP without leaking transport details i
 The wrapper should translate MCP success responses into `ToolResult(ok=True, ...)` and MCP errors into `ToolResult(ok=False, error=...)`.
 
 Tests should be able to use an in-process client or fake client so registry integration remains deterministic.
+
+### Client Wrapper Decision
+
+`McpPolicyClient` is a narrow structural protocol for the two MCP policy/knowledge calls. `LocalMcpPolicyClient` delegates to `LocalMcpServer` in process, keeping tests deterministic while leaving room for a transport-backed client later.
+
+`search_policy_with_mcp` translates the MCP search response back to the existing registry-facing `SearchPolicyOutput` shape: `{"policies": [...]}`. It records MCP provenance in `ToolResult.metadata`. MCP errors retain type, message, retryability, and details when translated into structured tool errors.
 
 ## Milestone 6.6 - Tool Registry Integration
 

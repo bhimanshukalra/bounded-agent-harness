@@ -5,6 +5,13 @@ from bounded_agent.tools.execution import (
     success_result,
     tool_connection,
 )
+from bounded_agent.tools.mcp_client import (
+    LocalMcpPolicyClient,
+    McpPolicyClient,
+    get_policy_detail_with_mcp,
+    mcp_error_result,
+    search_policy_with_mcp,
+)
 from bounded_agent.tools.models import Observation, ToolCall, ToolError, ToolResult, ToolSpec
 from bounded_agent.tools.policy_tools import check_refund_policy
 from bounded_agent.tools.read_tools import fetch_customer, fetch_order, fetch_ticket, search_policy
@@ -63,6 +70,8 @@ __all__ = [
     "FetchOrderOutput",
     "FetchTicketInput",
     "FetchTicketOutput",
+    "LocalMcpPolicyClient",
+    "McpPolicyClient",
     "Observation",
     "RegisteredTool",
     "RequestApprovalInput",
@@ -90,9 +99,12 @@ __all__ = [
     "fetch_customer",
     "fetch_order",
     "fetch_ticket",
+    "get_policy_detail_with_mcp",
+    "mcp_error_result",
     "registered_tool",
     "request_approval",
     "search_policy",
+    "search_policy_with_mcp",
     "success_result",
     "tool_connection",
     "update_ticket_status",
