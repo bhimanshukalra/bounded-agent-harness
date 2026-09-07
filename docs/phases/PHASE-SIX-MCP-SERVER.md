@@ -92,13 +92,13 @@ Phase Six is complete when:
   - [x] Preserve validation before MCP execution
   - [x] Preserve injected failure behavior where applicable
   - [x] Add registry integration tests
-- [ ] Milestone 6.7 - MCP Smoke Test
-  - [ ] Start the local MCP server in a test
-  - [ ] Call at least one MCP tool
-  - [ ] Assert typed success output
-  - [ ] Assert structured error output
-  - [ ] Ensure server cleanup is deterministic
-  - [ ] Add smoke test documentation
+- [x] Milestone 6.7 - MCP Smoke Test
+  - [x] Start the local MCP server in a test
+  - [x] Call at least one MCP tool
+  - [x] Assert typed success output
+  - [x] Assert structured error output
+  - [x] Ensure server cleanup is deterministic
+  - [x] Add smoke test documentation
 - [ ] Milestone 6.8 - MCP-Dependent Scenario
   - [ ] Add or update one scenario that depends on MCP output
   - [ ] Confirm expected actions mention the MCP-backed lookup
@@ -304,6 +304,10 @@ Prove the local server can actually start and serve at least one MCP call.
 ### Expected Behavior
 
 The smoke test should start the local server, call one MCP tool, assert typed success output, assert structured error output, and clean up deterministically.
+
+### Smoke Test Decision
+
+`LocalMcpServer` has explicit `start()`, `call_tool()`, and `close()` lifecycle methods. In-process clients now dispatch through `call_tool()` rather than reaching handlers directly. The smoke test starts the server, invokes `search_knowledge_base`, verifies a typed result, verifies structured not-found and validation errors, and confirms the server reports `stopped` after cleanup.
 
 ## Milestone 6.8 - MCP-Dependent Scenario
 

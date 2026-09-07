@@ -103,6 +103,7 @@ def search_policy(context: ToolExecutionContext, tool_input: StrictToolSchema) -
 
     server = build_local_mcp_server()
     try:
+        server.start()
         return search_policy_with_mcp(LocalMcpPolicyClient(server), typed_input)
     finally:
         server.close()

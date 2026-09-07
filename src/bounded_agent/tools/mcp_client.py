@@ -37,13 +37,19 @@ class LocalMcpPolicyClient:
         self,
         tool_input: SearchKnowledgeBaseInput,
     ) -> SearchKnowledgeBaseOutput | McpErrorOutput:
-        return self.server.handlers.search_knowledge_base(tool_input)
+        response = self.server.call_tool("search_knowledge_base", tool_input.model_dump())
+        if isinstance(response, SearchKnowledgeBaseOutput | McpErrorOutput):
+            return response
+        raise TypeError("search_knowledge_base returned an unexpected MCP response")
 
     def get_policy_detail(
         self,
         tool_input: GetPolicyDetailInput,
     ) -> GetPolicyDetailOutput | McpErrorOutput:
-        return self.server.handlers.get_policy_detail(tool_input)
+        response = self.server.call_tool("get_policy_detail", tool_input.model_dump())
+        if isinstance(response, GetPolicyDetailOutput | McpErrorOutput):
+            return response
+        raise TypeError("get_policy_detail returned an unexpected MCP response")
 
 
 def search_policy_with_mcp(client: McpPolicyClient, tool_input: SearchPolicyInput) -> ToolResult:

@@ -47,6 +47,7 @@ class EmptyMcpClient:
 def test_local_client_translates_search_response_to_stable_tool_result():
     server = build_local_mcp_server(Settings(_env_file=None))
     try:
+        server.start()
         result = search_policy_with_mcp(
             LocalMcpPolicyClient(server),
             SearchPolicyInput(query="approval required"),
@@ -86,6 +87,7 @@ def test_client_translates_mcp_errors_to_structured_tool_errors():
 def test_client_translates_policy_detail_response_and_error():
     server = build_local_mcp_server(Settings(_env_file=None))
     try:
+        server.start()
         success = get_policy_detail_with_mcp(
             LocalMcpPolicyClient(server),
             "policy_duplicate_charge_refund_v1",

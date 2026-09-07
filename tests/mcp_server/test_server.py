@@ -15,12 +15,14 @@ def test_build_local_mcp_server_uses_project_settings():
     settings = Settings(_env_file=None)
 
     server = build_local_mcp_server(settings)
-    health = server.health()
+    assert server.health().status == "stopped"
+    health = server.start().health()
 
     assert health.status == "ready"
     assert health.server_name == "bounded-agent-local-mcp"
     assert health.policy_fixture_path == settings.fixtures_dir / "policies.json"
     assert health.support_fixture_path == settings.fixtures_dir / "support_seed.json"
+    server.close()
 
 
 def test_local_mcp_server_exposes_initial_tool_capabilities():
