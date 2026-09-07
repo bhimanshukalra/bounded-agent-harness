@@ -27,7 +27,14 @@ from bounded_agent.loop.actions import (
     TerminalStateAction,
     ToolCallAction,
 )
-from bounded_agent.state import ResetResult, hash_arguments, reset_scenario_environment
+from bounded_agent.state import (
+    PersistedRunState,
+    ResetResult,
+    RunMemory,
+    RunStateStore,
+    hash_arguments,
+    reset_scenario_environment,
+)
 from bounded_agent.tools import (
     Observation,
     ToolCall,
@@ -98,12 +105,15 @@ class RunnerConfig:
     max_retries_per_error_type: int = 2
     trace_path: Path = Path("data/runs/trace.jsonl")
     result_path: Path | None = None
+    max_context_observations: int = 5
 
     def __post_init__(self) -> None:
         if self.max_steps < 1:
             raise ValueError("max_steps must be at least 1")
         if self.max_retries_per_error_type < 0:
             raise ValueError("max_retries_per_error_type cannot be negative")
+        if self.max_context_observations < 1:
+            raise ValueError("max_context_observations must be at least 1")
 
 
 @dataclass(frozen=True)
@@ -211,12 +221,44 @@ class AgentRunner:
         )
         return self.run(request, scenario=scenario, reset_result=reset_result)
 
+    def resume_scenario(self, run_id: str) -> RunnerResult:
+        persisted = RunStateStore(self.settings.runs_dir).load(run_id)
+        if persisted.terminal or persisted.agent_state.terminal_state is not None:
+            raise ValueError("terminal runs cannot be resumed")
+        if persisted.scenario_id is None:
+            raise ValueError("only scenario-backed runs can be resumed")
+
+        scenario = load_scenario(persisted.scenario_id, self.settings)
+        if persisted.task_id != scenario.id or persisted.ticket_id != scenario_ticket_id(scenario):
+            raise ValueError("persisted run state does not match scenario identity")
+
+        request = RunnerRequest(
+            run_id=persisted.run_id,
+            task=Task(task_id=persisted.task_id, goal=persisted.goal),
+            ticket_id=persisted.ticket_id,
+            scenario_id=persisted.scenario_id,
+            initial_state=persisted.agent_state,
+        )
+        reset_result = ResetResult(
+            scenario_id=persisted.scenario_id,
+            run_id=persisted.run_id,
+            db_path=persisted.db_path,
+        )
+        observations = tuple(Observation.model_validate(item) for item in persisted.observations)
+        return self.run(
+            request,
+            scenario=scenario,
+            reset_result=reset_result,
+            initial_observations=observations,
+        )
+
     def run(
         self,
         request: RunnerRequest,
         *,
         scenario: Scenario | None = None,
         reset_result: ResetResult | None = None,
+        initial_observations: Sequence[Observation] = (),
     ) -> RunnerResult:
         state = request.initial_state or AgentState(
             task_id=request.task.task_id,
@@ -224,9 +266,12 @@ class AgentRunner:
             scenario_id=request.scenario_id,
             budget_usage=BudgetUsage(max_steps=self.config.max_steps),
         )
-        observations: tuple[Observation, ...] = ()
+        observations = tuple(initial_observations)
         db_path = reset_result.db_path if reset_result is not None else None
         result_path = terminal_result_path(self.config, reset_result)
+        state_store = RunStateStore(self.settings.runs_dir) if db_path is not None else None
+        memory = RunMemory(db_path.parent) if db_path is not None else None
+        self._persist_run_progress(state_store, memory, request, db_path, state, observations)
 
         while True:
             budget_terminal_result = self._budget_terminal_result(request, state)
@@ -303,6 +348,7 @@ class AgentRunner:
                         error=run_error_from_tool_result(observation.tool_result),
                     ),
                 )
+                self._persist_run_progress(state_store, memory, request, db_path, state, observations)
                 continue
             if isinstance(decision.action, ApprovalRequestAction):
                 state = update_state_after_approval_request(state, request.run_id, decision.action)
@@ -320,6 +366,7 @@ class AgentRunner:
                         },
                     ),
                 )
+                self._persist_run_progress(state_store, memory, request, db_path, state, observations)
                 continue
             if isinstance(decision.action, RetryAction):
                 state = update_state_after_retry(state, decision.action)
@@ -337,6 +384,7 @@ class AgentRunner:
                         },
                     ),
                 )
+                self._persist_run_progress(state_store, memory, request, db_path, state, observations)
                 continue
 
             terminal_result = self._unsupported_action_result(request, state, decision)
@@ -357,6 +405,15 @@ class AgentRunner:
             ),
         )
         persist_terminal_result(result_path, terminal_result)
+        self._persist_run_progress(
+            state_store,
+            memory,
+            request,
+            db_path,
+            terminal_state,
+            observations,
+            terminal=True,
+        )
         return RunnerResult(
             terminal_result=terminal_result,
             state=terminal_state,
@@ -364,6 +421,36 @@ class AgentRunner:
             scenario=scenario,
             db_path=db_path,
             result_path=result_path,
+        )
+
+    def _persist_run_progress(
+        self,
+        state_store: RunStateStore | None,
+        memory: RunMemory | None,
+        request: RunnerRequest,
+        db_path: Path | None,
+        state: AgentState,
+        observations: Sequence[Observation],
+        *,
+        terminal: bool = False,
+    ) -> None:
+        if state_store is None or memory is None or db_path is None:
+            return
+        observation_list = list(observations)
+        memory.update(state, observation_list)
+        state_store.save(
+            PersistedRunState(
+                run_id=request.run_id,
+                task_id=request.task.task_id,
+                goal=request.task.goal,
+                ticket_id=request.ticket_id,
+                scenario_id=request.scenario_id,
+                db_path=db_path,
+                trace_path=self.config.trace_path,
+                agent_state=state,
+                observations=[observation.model_dump(mode="json") for observation in observation_list],
+                terminal=terminal,
+            )
         )
 
     def _build_runner_context(
@@ -379,7 +466,7 @@ class AgentRunner:
         bounded_context = build_bounded_context(
             request=request,
             state=state,
-            observations=observations,
+            observations=observations[-self.config.max_context_observations :],
             available_tools=available_tools,
             scenario=scenario,
         )
@@ -597,6 +684,9 @@ def update_state_after_tool_action(
         },
     ]
     retries_by_failure_type = dict(updated_state.retries_by_failure_type)
+    known_facts = dict(updated_state.known_facts)
+    if observation.tool_result.ok:
+        known_facts[action.tool_name] = observation.facts
     if observation.tool_result.error is not None:
         error_type = observation.tool_result.error.type
         retries_by_failure_type[error_type] = retries_by_failure_type.get(error_type, 0) + 1
@@ -607,6 +697,7 @@ def update_state_after_tool_action(
             "completed_actions": completed_actions,
             "tool_call_history": tool_call_history,
             "retries_by_failure_type": retries_by_failure_type,
+            "known_facts": known_facts,
         }
     )
 

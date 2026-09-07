@@ -37,12 +37,14 @@ from bounded_agent.state.inspection import (
     search_policies,
     snapshot_environment,
 )
+from bounded_agent.state.memory import RunMemory
 from bounded_agent.state.reset import (
     ResetResult,
     configure_injected_failures,
     reset_scenario_environment,
     run_database_path,
 )
+from bounded_agent.state.run_state import PersistedRunState, RunStateStore
 from bounded_agent.state.schema import (
     REQUIRED_TABLES,
     connect_database,
@@ -53,7 +55,10 @@ from bounded_agent.state.schema import (
 __all__ = [
     "REQUIRED_TABLES",
     "SUPPORTED_FAILURE_TYPES",
+    "PersistedRunState",
     "ResetResult",
+    "RunMemory",
+    "RunStateStore",
     "configure_injected_failures",
     "connect_database",
     "consume_injected_failure",

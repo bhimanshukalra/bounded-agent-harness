@@ -19,7 +19,7 @@ from bounded_agent.loop import (
     validate_action_decision,
 )
 from bounded_agent.state import connect_database
-from bounded_agent.tools import ToolResult, build_default_registry
+from bounded_agent.tools import Observation, ToolResult, build_default_registry
 
 
 class StaticDecisionSource:
@@ -393,6 +393,66 @@ def test_runner_records_mcp_backed_policy_lookup_for_mcp_dependent_scenario(tmp_
     assert persisted["scenario_id"] == "support_005"
 
 
+def test_runner_resumes_interrupted_mcp_scenario_from_durable_state(tmp_path):
+    settings = Settings(_env_file=None, runs_dir=tmp_path / "runs")
+    initial_runner = AgentRunner(
+        InterruptAfterFirstDecisionSource(search_policy_decision_payload()),
+        config=runner_config(tmp_path),
+        settings=settings,
+    )
+
+    with pytest.raises(RuntimeError, match="simulated interruption"):
+        initial_runner.run_scenario("support_005", "run_005")
+
+    resumed_runner = AgentRunner(
+        DeterministicDecisionSource([escalated_bundle_decision_payload()]),
+        config=runner_config(tmp_path),
+        settings=settings,
+    )
+    result = resumed_runner.resume_scenario("run_005")
+
+    assert result.terminal_result.terminal_state is TerminalState.ESCALATED
+    assert result.state.completed_actions == ["search_policy"]
+    assert len(result.observations) == 1
+    assert result.observations[0].tool_result.metadata["source"] == "local_mcp"
+    assert (tmp_path / "runs" / "run_005" / "memory" / "facts.md").exists()
+    events = read_trace_events(tmp_path / "trace.jsonl")
+    assert [event["event_type"] for event in events].count("tool_call") == 1
+
+
+def test_runner_compacts_bounded_context_to_configured_observation_limit(tmp_path):
+    runner = AgentRunner(
+        StaticDecisionSource(resolved_decision()),
+        config=RunnerConfig(
+            trace_path=tmp_path / "trace.jsonl",
+            max_context_observations=1,
+        ),
+    )
+    request = runner_request()
+    state = AgentState(task_id=request.task.task_id, goal=request.task.goal)
+    observations = (
+        successful_observation(),
+        Observation(
+            tool_name="search_policy",
+            tool_result=ToolResult(ok=True, result={"policies": []}),
+            summary="Executed search_policy.",
+            facts={"policies": []},
+        ),
+    )
+
+    context = runner._build_runner_context(
+        request=request,
+        state=state,
+        observations=observations,
+        scenario=None,
+        db_path=None,
+    )
+
+    assert [observation["tool_name"] for observation in context.bounded_context.observations] == [
+        "search_policy"
+    ]
+
+
 def test_runner_persists_terminal_result_to_default_run_output_path(tmp_path):
     settings = Settings(_env_file=None, runs_dir=tmp_path / "runs")
     runner = AgentRunner(
@@ -413,6 +473,19 @@ def test_runner_persists_terminal_result_to_default_run_output_path(tmp_path):
     assert persisted["resolution_summary"] == "Refund and customer draft completed."
     assert persisted["final_ticket_status"] == "resolved"
     assert persisted["environment_changes"] == [{"type": "refund", "charge_id": "ch_001_b"}]
+
+
+def test_runner_refuses_to_resume_terminal_run(tmp_path):
+    settings = Settings(_env_file=None, runs_dir=tmp_path / "runs")
+    runner = AgentRunner(
+        DeterministicDecisionSource([resolved_decision_payload()]),
+        config=runner_config(tmp_path),
+        settings=settings,
+    )
+    runner.run_scenario("support_001", "run_001")
+
+    with pytest.raises(ValueError, match="terminal runs cannot be resumed"):
+        runner.resume_scenario("run_001")
 
 
 def test_runner_persists_terminal_result_to_custom_result_path(tmp_path):
@@ -926,6 +999,36 @@ def resolved_decision_payload():
     }
 
 
+def search_policy_decision_payload():
+    return {
+        "thought_summary": "Search MCP-backed policy knowledge for bundle rules.",
+        "action": {
+            "type": "tool_call",
+            "tool_name": "search_policy",
+            "arguments": {"query": "bundle"},
+        },
+        "safety_check": {"permission_level": "read_only", "approval_required": False},
+    }
+
+
+def escalated_bundle_decision_payload():
+    return {
+        "thought_summary": "Policy ambiguity requires a specialist review.",
+        "action": {
+            "type": "set_terminal_state",
+            "terminal_state": "escalated",
+            "summary": "Bundled promotional refund needs policy review.",
+            "fields": {
+                "escalation_reason": "Bundle terms do not establish separable pricing.",
+                "recommended_owner": "policy_specialist",
+                "open_questions": ["Are item-level prices separable under the promotion?"],
+            },
+        },
+        "safety_check": {"permission_level": "read_only", "approval_required": False},
+        "stop_reason": "policy_ambiguity",
+    }
+
+
 def blocked_tool_error_decision_payload():
     return {
         "thought_summary": "The order lookup failed with a structured not-found error.",
@@ -1033,6 +1136,18 @@ class RecordingModelDecisionClient:
     def complete(self, payload):
         self.seen_payloads.append(payload)
         return self.decision
+
+
+class InterruptAfterFirstDecisionSource:
+    def __init__(self, first_decision):
+        self.first_decision = first_decision
+        self.called = False
+
+    def decide(self, _context):
+        if self.called:
+            raise RuntimeError("simulated interruption")
+        self.called = True
+        return ActionDecision.model_validate(self.first_decision)
 
 
 def runner_config(
