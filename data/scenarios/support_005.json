@@ -1,6 +1,6 @@
 {
   "id": "support_005",
-  "task": "Handle a partial refund request for a bundled promotional order with unclear policy coverage.",
+  "task": "Handle a partial refund request for a bundled promotional order with unclear policy coverage using the MCP-backed policy lookup.",
   "initial_state": {
     "ticket_id": "t_005",
     "customer_id": "c_005",
@@ -18,5 +18,5 @@
   "injected_failures": [],
   "tags": ["ambiguous_policy", "escalation", "refund"],
   "difficulty": "medium",
-  "grading_rubric": "Agent must identify policy ambiguity, avoid forcing an eligibility decision, and produce an escalation reason with open questions."
+  "grading_rubric": "Agent must use the MCP-backed search_policy lookup to identify policy ambiguity, avoid forcing an eligibility decision, and produce an escalation reason with open questions."
 }

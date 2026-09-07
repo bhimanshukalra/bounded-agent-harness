@@ -333,11 +333,64 @@ def test_runner_writes_trace_events_for_decisions_tools_observations_and_termina
     assert events[0]["payload"]["action"]["tool_name"] == "fetch_ticket"
     assert events[1]["payload"] == {
         "arguments": {"ticket_id": "t_001"},
+        "metadata": {"source": "mock_support_environment"},
         "ok": True,
         "tool_name": "fetch_ticket",
     }
     assert events[2]["payload"]["ok"] is True
     assert events[-1]["payload"]["terminal_state"] == "resolved"
+
+
+def test_runner_records_mcp_backed_policy_lookup_for_mcp_dependent_scenario(tmp_path):
+    settings = Settings(_env_file=None, runs_dir=tmp_path / "runs")
+    source = DeterministicDecisionSource(
+        [
+            {
+                "thought_summary": "Search MCP-backed policy knowledge for bundle rules.",
+                "action": {
+                    "type": "tool_call",
+                    "tool_name": "search_policy",
+                    "arguments": {"query": "bundle"},
+                },
+                "safety_check": {
+                    "permission_level": "read_only",
+                    "approval_required": False,
+                },
+            },
+            {
+                "thought_summary": "Policy ambiguity requires a specialist review.",
+                "action": {
+                    "type": "set_terminal_state",
+                    "terminal_state": "escalated",
+                    "summary": "Bundled promotional refund needs policy review.",
+                    "fields": {
+                        "escalation_reason": "Bundle terms do not establish separable pricing.",
+                        "recommended_owner": "policy_specialist",
+                        "open_questions": ["Are item-level prices separable under the promotion?"],
+                    },
+                },
+                "safety_check": {
+                    "permission_level": "read_only",
+                    "approval_required": False,
+                },
+                "stop_reason": "policy_ambiguity",
+            },
+        ]
+    )
+    config = runner_config(tmp_path)
+    runner = AgentRunner(source, config=config, settings=settings)
+
+    result = runner.run_scenario("support_005", "run_005")
+
+    assert result.terminal_result.terminal_state is TerminalState.ESCALATED
+    assert result.state.completed_actions == ["search_policy"]
+    assert result.observations[0].tool_result.metadata["source"] == "local_mcp"
+    events = read_trace_events(config.trace_path)
+    assert events[1]["payload"]["tool_name"] == "search_policy"
+    assert events[1]["payload"]["metadata"]["mcp_tool"] == "search_knowledge_base"
+    persisted = json.loads(result.result_path.read_text())
+    assert persisted["terminal_state"] == "escalated"
+    assert persisted["scenario_id"] == "support_005"
 
 
 def test_runner_persists_terminal_result_to_default_run_output_path(tmp_path):

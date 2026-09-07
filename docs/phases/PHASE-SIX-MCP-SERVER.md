@@ -99,13 +99,13 @@ Phase Six is complete when:
   - [x] Assert structured error output
   - [x] Ensure server cleanup is deterministic
   - [x] Add smoke test documentation
-- [ ] Milestone 6.8 - MCP-Dependent Scenario
-  - [ ] Add or update one scenario that depends on MCP output
-  - [ ] Confirm expected actions mention the MCP-backed lookup
-  - [ ] Run the scenario through `AgentRunner`
-  - [ ] Confirm trace records MCP-backed lookup behavior
-  - [ ] Confirm terminal result persists
-  - [ ] Add scenario test coverage
+- [x] Milestone 6.8 - MCP-Dependent Scenario
+  - [x] Add or update one scenario that depends on MCP output
+  - [x] Confirm expected actions mention the MCP-backed lookup
+  - [x] Run the scenario through `AgentRunner`
+  - [x] Confirm trace records MCP-backed lookup behavior
+  - [x] Confirm terminal result persists
+  - [x] Add scenario test coverage
 - [ ] Milestone 6.9 - Phase Seven Readiness Review
   - [ ] Confirm server starts locally
   - [ ] Confirm MCP tools return typed outputs
@@ -318,6 +318,10 @@ Show that MCP output can influence a bounded agent run.
 ### Expected Behavior
 
 At least one scenario should require MCP-backed policy or knowledge lookup. The runner trace should show the relevant lookup, and the terminal result should persist normally.
+
+### MCP-Dependent Scenario Decision
+
+`support_005` now explicitly requires the MCP-backed `search_policy` lookup before escalation for ambiguous bundled-promotion policy coverage. The runner writes tool-result metadata into the trace, allowing the scenario test to assert `source: local_mcp` and `mcp_tool: search_knowledge_base` while confirming the escalated terminal result persists.
 
 ## Milestone 6.9 - Phase Seven Readiness Review
 

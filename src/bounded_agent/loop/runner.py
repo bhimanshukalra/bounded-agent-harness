@@ -288,6 +288,7 @@ class AgentRunner:
                             "tool_name": decision.action.tool_name,
                             "arguments": decision.action.arguments,
                             "ok": observation.tool_result.ok,
+                            "metadata": observation.tool_result.metadata,
                         },
                     ),
                 )
