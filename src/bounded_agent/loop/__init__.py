@@ -14,6 +14,7 @@ from bounded_agent.loop.runner import (
     RunnerContext,
     RunnerRequest,
     RunnerResult,
+    scenario_ticket_id,
 )
 
 __all__ = [
@@ -30,4 +31,5 @@ __all__ = [
     "SafetyCheck",
     "TerminalStateAction",
     "ToolCallAction",
+    "scenario_ticket_id",
 ]

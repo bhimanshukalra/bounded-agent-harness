@@ -60,13 +60,13 @@ Phase Five is complete when:
   - [x] Define runner outputs
   - [x] Define stop conditions
   - [x] Add runner contract tests
-- [ ] Milestone 5.2 - Run State Loading
-  - [ ] Load task metadata
-  - [ ] Load scenario metadata
-  - [ ] Reset or attach to scenario environment
-  - [ ] Initialize `AgentState`
-  - [ ] Initialize `BudgetUsage`
-  - [ ] Add state-loading tests
+- [x] Milestone 5.2 - Run State Loading
+  - [x] Load task metadata
+  - [x] Load scenario metadata
+  - [x] Reset or attach to scenario environment
+  - [x] Initialize `AgentState`
+  - [x] Initialize `BudgetUsage`
+  - [x] Add state-loading tests
 - [ ] Milestone 5.3 - Bounded Context Builder
   - [ ] Build context from task, state, scenario, and observations
   - [ ] Include available tool specs from registry

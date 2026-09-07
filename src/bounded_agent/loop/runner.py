@@ -4,8 +4,18 @@ from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
 
-from bounded_agent.domain import AgentState, BudgetUsage, Task, TerminalResult, TerminalState
+from bounded_agent.config import Settings, load_settings
+from bounded_agent.domain import (
+    AgentState,
+    BudgetUsage,
+    Scenario,
+    Task,
+    TerminalResult,
+    TerminalState,
+)
+from bounded_agent.evals import load_scenario
 from bounded_agent.loop.actions import ActionDecision, TerminalStateAction
+from bounded_agent.state import ResetResult, reset_scenario_environment
 from bounded_agent.tools import Observation, ToolRegistry, ToolSpec, build_default_registry
 
 
@@ -50,6 +60,8 @@ class RunnerContext:
     observations: Sequence[Observation]
     available_tools: Sequence[ToolSpec]
     budget_usage: BudgetUsage
+    scenario: Scenario | None = None
+    db_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -57,6 +69,8 @@ class RunnerResult:
     terminal_result: TerminalResult
     state: AgentState
     observations: Sequence[Observation] = field(default_factory=tuple)
+    scenario: Scenario | None = None
+    db_path: Path | None = None
 
 
 class AgentRunner:
@@ -66,12 +80,31 @@ class AgentRunner:
         *,
         registry: ToolRegistry | None = None,
         config: RunnerConfig | None = None,
+        settings: Settings | None = None,
     ) -> None:
         self.decision_source = decision_source
         self.registry = registry or build_default_registry()
         self.config = config or RunnerConfig()
+        self.settings = settings or load_settings()
 
-    def run(self, request: RunnerRequest) -> RunnerResult:
+    def run_scenario(self, scenario_id: str, run_id: str) -> RunnerResult:
+        scenario = load_scenario(scenario_id, self.settings)
+        reset_result = reset_scenario_environment(scenario.id, run_id, self.settings)
+        request = RunnerRequest(
+            run_id=run_id,
+            task=Task(task_id=scenario.id, goal=scenario.task),
+            scenario_id=scenario.id,
+            ticket_id=scenario_ticket_id(scenario),
+        )
+        return self.run(request, scenario=scenario, reset_result=reset_result)
+
+    def run(
+        self,
+        request: RunnerRequest,
+        *,
+        scenario: Scenario | None = None,
+        reset_result: ResetResult | None = None,
+    ) -> RunnerResult:
         state = request.initial_state or AgentState(
             task_id=request.task.task_id,
             goal=request.task.goal,
@@ -87,6 +120,8 @@ class AgentRunner:
             observations=observations,
             available_tools=tuple(self.registry.list_specs()),
             budget_usage=state.budget_usage,
+            scenario=scenario,
+            db_path=reset_result.db_path if reset_result is not None else None,
         )
         decision = self.decision_source.decide(context)
 
@@ -100,6 +135,8 @@ class AgentRunner:
             terminal_result=terminal_result,
             state=terminal_state,
             observations=observations,
+            scenario=scenario,
+            db_path=reset_result.db_path if reset_result is not None else None,
         )
 
     def _terminal_result_from_action(
@@ -139,3 +176,10 @@ class AgentRunner:
             last_successful_step=state.budget_usage.steps,
             trace_event_id=f"trace_{uuid4().hex}",
         )
+
+
+def scenario_ticket_id(scenario: Scenario) -> str:
+    ticket_id = scenario.initial_state.get("ticket_id")
+    if not isinstance(ticket_id, str) or not ticket_id.strip():
+        raise ValueError(f"scenario does not define initial_state.ticket_id: {scenario.id}")
+    return ticket_id

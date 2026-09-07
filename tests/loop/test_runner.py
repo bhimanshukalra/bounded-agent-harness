@@ -2,8 +2,16 @@ from pathlib import Path
 
 import pytest
 
+from bounded_agent.config import Settings
 from bounded_agent.domain import Task, TerminalState
-from bounded_agent.loop import ActionDecision, AgentRunner, RunnerConfig, RunnerRequest
+from bounded_agent.loop import (
+    ActionDecision,
+    AgentRunner,
+    RunnerConfig,
+    RunnerRequest,
+    scenario_ticket_id,
+)
+from bounded_agent.state import connect_database
 
 
 class StaticDecisionSource:
@@ -97,6 +105,45 @@ def test_runner_config_rejects_invalid_step_budget():
         RunnerConfig(max_steps=0)
 
 
+def test_runner_loads_scenario_and_resets_environment(tmp_path):
+    settings = Settings(_env_file=None, runs_dir=tmp_path / "runs")
+    decision_source = StaticDecisionSource(resolved_decision())
+    runner = AgentRunner(
+        decision_source,
+        config=RunnerConfig(max_steps=7, trace_path=Path("data/runs/run_001/trace.jsonl")),
+        settings=settings,
+    )
+
+    result = runner.run_scenario("support_001", "run_001")
+
+    assert result.scenario is not None
+    assert result.scenario.id == "support_001"
+    assert result.db_path == tmp_path / "runs" / "run_001" / "state.db"
+    assert result.db_path.exists()
+    assert result.state.task_id == "support_001"
+    assert result.state.goal == "Resolve the customer's duplicate charge complaint."
+    assert result.state.scenario_id == "support_001"
+    assert result.state.budget_usage.max_steps == 7
+
+    context = decision_source.seen_contexts[0]
+    assert context.scenario is result.scenario
+    assert context.db_path == result.db_path
+    assert context.request.ticket_id == "t_001"
+
+    connection = connect_database(result.db_path)
+    try:
+        assert connection.execute("SELECT COUNT(*) FROM tickets").fetchone()[0] == 10
+    finally:
+        connection.close()
+
+
+def test_scenario_ticket_id_rejects_missing_ticket_id():
+    scenario = object_without_ticket_id()
+
+    with pytest.raises(ValueError, match="initial_state.ticket_id"):
+        scenario_ticket_id(scenario)
+
+
 def runner_request() -> RunnerRequest:
     return RunnerRequest(
         run_id="run_001",
@@ -124,4 +171,18 @@ def resolved_decision() -> ActionDecision:
             "approval_required": False,
         },
         stop_reason="done",
+    )
+
+
+def object_without_ticket_id():
+    from bounded_agent.domain import Scenario
+
+    return Scenario(
+        id="support_missing_ticket",
+        task="Resolve a ticket with malformed scenario state.",
+        expected_terminal_state="blocked_missing_information",
+        expected_actions=["fetch_ticket"],
+        tags=["missing_info"],
+        difficulty="easy",
+        grading_rubric="Scenario is invalid for runner loading.",
     )
