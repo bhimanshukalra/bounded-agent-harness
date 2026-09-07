@@ -1,13 +1,13 @@
 from typing import Any
 
 from bounded_agent.domain import ErrorType
+from bounded_agent.mcp_server import build_local_mcp_server
 from bounded_agent.state import (
     consume_injected_failure,
     get_charges_for_order,
     get_customer,
     get_order,
     get_ticket,
-    search_policies,
 )
 from bounded_agent.tools.execution import (
     ToolExecutionContext,
@@ -16,6 +16,7 @@ from bounded_agent.tools.execution import (
     tool_connection,
 )
 from bounded_agent.tools.failure_handling import injected_failure_result
+from bounded_agent.tools.mcp_client import LocalMcpPolicyClient, search_policy_with_mcp
 from bounded_agent.tools.models import ToolResult
 from bounded_agent.tools.schemas import (
     FetchCustomerInput,
@@ -100,12 +101,11 @@ def search_policy(context: ToolExecutionContext, tool_input: StrictToolSchema) -
         if failure is not None:
             return failure
 
-        policies = search_policies(connection, typed_input.query)
-
-    return success_result(
-        {"policies": policies},
-        metadata={"source": "mock_support_environment"},
-    )
+    server = build_local_mcp_server()
+    try:
+        return search_policy_with_mcp(LocalMcpPolicyClient(server), typed_input)
+    finally:
+        server.close()
 
 
 def consume_read_failure(

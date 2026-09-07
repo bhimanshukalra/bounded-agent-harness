@@ -85,13 +85,13 @@ Phase Six is complete when:
   - [x] Translate MCP errors into structured tool errors
   - [x] Keep registry-facing schemas stable
   - [x] Add client wrapper tests
-- [ ] Milestone 6.6 - Tool Registry Integration
-  - [ ] Route `search_policy` or `search_knowledge_base` through MCP
-  - [ ] Preserve permission level as `read_only`
-  - [ ] Preserve no-mutation behavior
-  - [ ] Preserve validation before MCP execution
-  - [ ] Preserve injected failure behavior where applicable
-  - [ ] Add registry integration tests
+- [x] Milestone 6.6 - Tool Registry Integration
+  - [x] Route `search_policy` or `search_knowledge_base` through MCP
+  - [x] Preserve permission level as `read_only`
+  - [x] Preserve no-mutation behavior
+  - [x] Preserve validation before MCP execution
+  - [x] Preserve injected failure behavior where applicable
+  - [x] Add registry integration tests
 - [ ] Milestone 6.7 - MCP Smoke Test
   - [ ] Start the local MCP server in a test
   - [ ] Call at least one MCP tool
@@ -288,6 +288,12 @@ Route one read-only tool through MCP while preserving the existing agent-facing 
 ### Expected Behavior
 
 Registry callers should still invoke a typed tool through the existing registry surface. MCP should be an implementation detail behind that tool, not a new escape hatch for the agent.
+
+### Registry Integration Decision
+
+The existing `search_policy` read-only registry tool now delegates to `LocalMcpPolicyClient` through `search_policy_with_mcp`. Registry input validation remains the first gate; the executor continues to consume matching injected failures before making the MCP call.
+
+The agent-facing `SearchPolicyInput` and `SearchPolicyOutput` schemas are unchanged. The wrapper returns the same `{"policies": [...]}` payload, with MCP provenance recorded in tool metadata. Each registry call constructs and closes its local server, so MCP-backed reads remain non-mutating and do not retain server resources between calls.
 
 ## Milestone 6.7 - MCP Smoke Test
 

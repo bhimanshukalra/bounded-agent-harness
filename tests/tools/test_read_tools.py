@@ -69,6 +69,11 @@ def test_search_policy_returns_matching_policies_from_default_registry(tmp_path)
         "policy_approval_required_v1",
         "policy_duplicate_charge_refund_v1",
     ]
+    assert result.metadata == {
+        "source": "local_mcp",
+        "mcp_tool": "search_knowledge_base",
+        "total_matches": 2,
+    }
 
 
 def test_read_tools_return_structured_not_found_errors(tmp_path):
