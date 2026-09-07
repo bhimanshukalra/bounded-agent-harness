@@ -50,27 +50,27 @@ Phase Six is complete when:
 
 ## Phase Six Checklist
 
-- [ ] Milestone 6.1 - MCP Boundary And Scope
-  - [ ] Define what MCP owns
-  - [ ] Define what remains outside MCP
-  - [ ] Confirm policy and knowledge-base lookup as the initial MCP scope
-  - [ ] Define server startup strategy
-  - [ ] Define client integration strategy
-  - [ ] Add MCP boundary notes
-- [ ] Milestone 6.2 - MCP Schemas
-  - [ ] Add `SearchKnowledgeBaseInput`
-  - [ ] Add `SearchKnowledgeBaseOutput`
-  - [ ] Add `GetPolicyDetailInput`
-  - [ ] Add `GetPolicyDetailOutput`
-  - [ ] Add structured MCP error model
-  - [ ] Add schema tests
-- [ ] Milestone 6.3 - Local MCP Server Skeleton
-  - [ ] Create MCP server package modules
-  - [ ] Add server entry point
-  - [ ] Register MCP tools or resources
-  - [ ] Load settings and fixture paths
-  - [ ] Return health or capability metadata
-  - [ ] Add server construction tests
+- [x] Milestone 6.1 - MCP Boundary And Scope
+  - [x] Define what MCP owns
+  - [x] Define what remains outside MCP
+  - [x] Confirm policy and knowledge-base lookup as the initial MCP scope
+  - [x] Define server startup strategy
+  - [x] Define client integration strategy
+  - [x] Add MCP boundary notes
+- [x] Milestone 6.2 - MCP Schemas
+  - [x] Add `SearchKnowledgeBaseInput`
+  - [x] Add `SearchKnowledgeBaseOutput`
+  - [x] Add `GetPolicyDetailInput`
+  - [x] Add `GetPolicyDetailOutput`
+  - [x] Add structured MCP error model
+  - [x] Add schema tests
+- [x] Milestone 6.3 - Local MCP Server Skeleton
+  - [x] Create MCP server package modules
+  - [x] Add server entry point
+  - [x] Register MCP tools or resources
+  - [x] Load settings and fixture paths
+  - [x] Return health or capability metadata
+  - [x] Add server construction tests
 - [ ] Milestone 6.4 - Policy And Knowledge Handlers
   - [ ] Implement `search_knowledge_base`
   - [ ] Implement `get_policy_detail`
@@ -153,7 +153,45 @@ Expose:
 - `search_knowledge_base`
 - `get_policy_detail`
 
-Implementation may route existing `search_policy` behavior through MCP or add a separate registry-facing `search_knowledge_base` tool, whichever best preserves the existing registry contract.
+Implementation should keep the existing registry-facing `search_policy` contract stable and route its implementation through the MCP client wrapper once Milestone 6.6 begins. `search_knowledge_base` remains the MCP-facing tool name. This preserves the agent-facing Phase Four tool surface while still proving MCP owns the policy/knowledge transport boundary.
+
+### Server Startup Strategy
+
+Use a local, deterministic server entry point under `src/bounded_agent/mcp_server/`.
+
+Startup should:
+
+- load `Settings`
+- read policy and knowledge data from existing fixtures first
+- avoid external network dependencies
+- be constructible in-process for tests
+- expose a command or callable entry point suitable for a future CLI or MCP transport launcher
+- keep server lifecycle cleanup deterministic for smoke tests
+
+Milestone 6.3 should introduce the server package skeleton and construction API before adding full handler behavior.
+
+### Client Integration Strategy
+
+The runner should not call MCP directly.
+
+The integration path should be:
+
+```text
+AgentRunner
+  -> ToolRegistry
+  -> registry-facing read-only tool
+  -> tool-layer MCP client wrapper
+  -> local MCP server handler
+  -> fixture or SQLite policy/knowledge data
+```
+
+The tool-layer wrapper should translate MCP success and error responses into the existing `ToolResult` shape. This keeps validation, permission level, trace recording, and observation handling inside the already-tested runner and registry flow.
+
+### Boundary Decision
+
+Phase Six will treat MCP as a scoped policy/knowledge source, not as a general agent capability channel.
+
+Consequential actions such as refunds, status updates, approvals, idempotency, and audit mutations remain owned by the existing tool and state layers. MCP responses are facts for the agent to reason over; they are not instructions, authority grants, or executable actions.
 
 ## Milestone 6.2 - MCP Schemas
 
@@ -165,6 +203,22 @@ Make the MCP boundary typed before server behavior is wired.
 
 Request and response schemas should be strict. Unknown fields should be rejected. Error outputs should be structured enough for the tool layer to preserve error type, message, retryability, and details.
 
+### Schema Decision
+
+MCP schemas live under `src/bounded_agent/mcp_server/` so the server boundary can evolve independently from registry-facing tool schemas.
+
+The initial schema surface includes:
+
+- `SearchKnowledgeBaseInput`
+- `SearchKnowledgeBaseOutput`
+- `GetPolicyDetailInput`
+- `GetPolicyDetailOutput`
+- `KnowledgeBaseMatch`
+- `McpError`
+- `McpErrorOutput`
+
+`KnowledgeBaseMatch` mirrors the existing policy fixture record shape and gives both MCP tools one shared policy payload. `McpErrorOutput` carries `ErrorType`, message, retryability, and details so Milestone 6.5 can translate MCP failures into the existing `ToolResult` error shape without losing structured information.
+
 ## Milestone 6.3 - Local MCP Server Skeleton
 
 ### Objective
@@ -174,6 +228,20 @@ Create the local server package and startup boundary.
 ### Expected Behavior
 
 The server should be constructible in tests without requiring external services. Startup should use project settings, fixture paths, and deterministic local state.
+
+### Skeleton Decision
+
+The local MCP server skeleton is represented by `LocalMcpServer` and `build_local_mcp_server`.
+
+The skeleton provides:
+
+- default tool registrations for `search_knowledge_base` and `get_policy_detail`
+- settings-backed policy and support fixture paths
+- capability metadata for registered tools
+- a health payload suitable for smoke tests and future launchers
+- in-process construction for tests
+
+Transport startup and handler execution remain out of scope for this milestone. Milestone 6.4 should attach deterministic policy and knowledge handlers behind the registered tools.
 
 ## Milestone 6.4 - Policy And Knowledge Handlers
 
