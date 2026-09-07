@@ -226,6 +226,16 @@ class AgentRunner:
         db_path = reset_result.db_path if reset_result is not None else None
 
         while True:
+            budget_terminal_result = self._budget_terminal_result(request, state)
+            if budget_terminal_result is not None:
+                terminal_result = budget_terminal_result
+                break
+
+            retry_terminal_result = self._retry_terminal_result(request, state, observations)
+            if retry_terminal_result is not None:
+                terminal_result = retry_terminal_result
+                break
+
             context = self._build_runner_context(
                 request=request,
                 state=state,
@@ -482,6 +492,76 @@ class AgentRunner:
             retry_count=0,
         )
 
+    def _budget_terminal_result(
+        self,
+        request: RunnerRequest,
+        state: AgentState,
+    ) -> TerminalResult | None:
+        if state.budget_usage.steps < state.budget_usage.max_steps:
+            return None
+
+        return TerminalResult(
+            run_id=request.run_id,
+            scenario_id=request.scenario_id,
+            ticket_id=request.ticket_id,
+            terminal_state=TerminalState.FAILED_BUDGET_EXCEEDED,
+            summary="Max step budget was exhausted before the next action.",
+            actions_taken=state.completed_actions,
+            budget_usage=state.budget_usage,
+            trace_path=self.config.trace_path,
+            budget_type="steps",
+            budget_limit=float(state.budget_usage.max_steps),
+            budget_used=float(state.budget_usage.steps),
+            last_safe_state=state.model_dump(mode="json"),
+        )
+
+    def _retry_terminal_result(
+        self,
+        request: RunnerRequest,
+        state: AgentState,
+        observations: Sequence[Observation],
+    ) -> TerminalResult | None:
+        exceeded = [
+            (error_type, retry_count)
+            for error_type, retry_count in state.retries_by_failure_type.items()
+            if retry_count > self.config.max_retries_per_error_type
+        ]
+        if not exceeded:
+            return None
+
+        error_type, retry_count = min(exceeded, key=lambda item: item[0].value)
+        last_error = last_observed_error(observations)
+        if last_error is None:
+            return TerminalResult(
+                run_id=request.run_id,
+                scenario_id=request.scenario_id,
+                ticket_id=request.ticket_id,
+                terminal_state=TerminalState.FAILED_UNRECOVERABLE,
+                summary="Retry budget was exhausted without a tool error observation.",
+                actions_taken=state.completed_actions,
+                budget_usage=state.budget_usage,
+                trace_path=self.config.trace_path,
+                error_summary=f"Retry budget exceeded for {error_type.value}.",
+                last_successful_step=state.budget_usage.steps,
+                trace_event_id=f"trace_{uuid4().hex}",
+            )
+
+        return TerminalResult(
+            run_id=request.run_id,
+            scenario_id=request.scenario_id,
+            ticket_id=request.ticket_id,
+            terminal_state=TerminalState.BLOCKED_TOOL_ERROR,
+            summary="Retry budget was exhausted for a tool error.",
+            actions_taken=state.completed_actions,
+            errors=[last_error],
+            budget_usage=state.budget_usage,
+            trace_path=self.config.trace_path,
+            failed_tool=last_failed_tool(observations) or "unknown",
+            error_type=error_type,
+            retry_count=retry_count,
+            last_error=last_error,
+        )
+
 
 def scenario_ticket_id(scenario: Scenario) -> str:
     ticket_id = scenario.initial_state.get("ticket_id")
@@ -589,6 +669,21 @@ def run_error_from_tool_result(result: ToolResult) -> RunError | None:
         retryable=result.error.retryable,
         details=result.error.details,
     )
+
+
+def last_observed_error(observations: Sequence[Observation]) -> RunError | None:
+    for observation in reversed(observations):
+        error = run_error_from_tool_result(observation.tool_result)
+        if error is not None:
+            return error
+    return None
+
+
+def last_failed_tool(observations: Sequence[Observation]) -> str | None:
+    for observation in reversed(observations):
+        if observation.tool_result.error is not None:
+            return observation.tool_name
+    return None
 
 
 def write_trace_event(trace_path: Path, event: TraceEvent) -> None:

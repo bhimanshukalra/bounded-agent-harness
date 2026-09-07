@@ -340,6 +340,116 @@ def test_runner_writes_trace_events_for_decisions_tools_observations_and_termina
     assert events[-1]["payload"]["terminal_state"] == "resolved"
 
 
+def test_runner_stops_before_decision_when_step_budget_is_exhausted(tmp_path):
+    initial_state = AgentState(
+        task_id="task_001",
+        goal="Resolve duplicate charge ticket.",
+        scenario_id="support_001",
+        budget_usage=BudgetUsage(steps=1, max_steps=1),
+        completed_actions=["fetch_ticket"],
+    )
+    source = StaticDecisionSource(resolved_decision())
+    runner = AgentRunner(source, config=runner_config(tmp_path, max_steps=1))
+
+    result = runner.run(runner_request(initial_state=initial_state))
+
+    assert source.seen_contexts == []
+    assert result.terminal_result.terminal_state is TerminalState.FAILED_BUDGET_EXCEEDED
+    assert result.terminal_result.budget_type == "steps"
+    assert result.terminal_result.budget_limit == 1.0
+    assert result.terminal_result.budget_used == 1.0
+    assert result.terminal_result.last_safe_state["budget_usage"]["steps"] == 1
+
+
+def test_runner_emits_budget_terminal_after_tool_action_exhausts_steps(tmp_path):
+    settings = Settings(_env_file=None, runs_dir=tmp_path / "runs")
+    source = DeterministicDecisionSource(
+        [
+            {
+                "thought_summary": "Inspect the ticket.",
+                "action": {
+                    "type": "tool_call",
+                    "tool_name": "fetch_ticket",
+                    "arguments": {"ticket_id": "t_001"},
+                },
+                "safety_check": {
+                    "permission_level": "read_only",
+                    "approval_required": False,
+                },
+            },
+            resolved_decision_payload(),
+        ]
+    )
+    config = runner_config(tmp_path, max_steps=1)
+    runner = AgentRunner(source, config=config, settings=settings)
+
+    result = runner.run_scenario("support_001", "run_001")
+
+    assert result.terminal_result.terminal_state is TerminalState.FAILED_BUDGET_EXCEEDED
+    assert result.state.budget_usage.steps == 1
+    assert len(result.observations) == 1
+    assert [event["event_type"] for event in read_trace_events(config.trace_path)] == [
+        "decision",
+        "tool_call",
+        "observation",
+        "terminal_state",
+    ]
+
+
+def test_runner_blocks_tool_error_when_retry_budget_is_exhausted(tmp_path):
+    settings = Settings(_env_file=None, runs_dir=tmp_path / "runs")
+    source = DeterministicDecisionSource(
+        [
+            {
+                "thought_summary": "Fetch a missing order.",
+                "action": {
+                    "type": "tool_call",
+                    "tool_name": "fetch_order",
+                    "arguments": {"order_id": "o_missing"},
+                },
+                "safety_check": {
+                    "permission_level": "read_only",
+                    "approval_required": False,
+                },
+            },
+            resolved_decision_payload(),
+        ]
+    )
+    runner = AgentRunner(
+        source,
+        config=runner_config(tmp_path, max_retries_per_error_type=0),
+        settings=settings,
+    )
+
+    result = runner.run_scenario("support_001", "run_001")
+
+    assert result.terminal_result.terminal_state is TerminalState.BLOCKED_TOOL_ERROR
+    assert result.terminal_result.failed_tool == "fetch_order"
+    assert result.terminal_result.error_type is ErrorType.NOT_FOUND
+    assert result.terminal_result.retry_count == 1
+    assert result.terminal_result.last_error.type is ErrorType.NOT_FOUND
+    assert result.terminal_result.errors == [result.terminal_result.last_error]
+
+
+def test_runner_emits_unrecoverable_when_retry_budget_exhausts_without_tool_error(tmp_path):
+    initial_state = AgentState(
+        task_id="task_001",
+        goal="Resolve duplicate charge ticket.",
+        scenario_id="support_001",
+        budget_usage=BudgetUsage(steps=1, max_steps=12),
+        retries_by_failure_type={ErrorType.TIMEOUT: 1},
+    )
+    source = StaticDecisionSource(resolved_decision())
+    runner = AgentRunner(source, config=runner_config(tmp_path, max_retries_per_error_type=0))
+
+    result = runner.run(runner_request(initial_state=initial_state))
+
+    assert source.seen_contexts == []
+    assert result.terminal_result.terminal_state is TerminalState.FAILED_UNRECOVERABLE
+    assert result.terminal_result.error_summary == "Retry budget exceeded for timeout."
+    assert result.terminal_result.last_successful_step == 1
+
+
 def test_runner_request_rejects_blank_run_id():
     with pytest.raises(ValueError, match="run_id cannot be blank"):
         RunnerRequest(
@@ -692,12 +802,13 @@ def test_validate_action_decision_rejects_retry_for_unknown_tool():
     assert validation.errors == ("unknown retry tool: missing_tool",)
 
 
-def runner_request() -> RunnerRequest:
+def runner_request(initial_state=None) -> RunnerRequest:
     return RunnerRequest(
         run_id="run_001",
         task=Task(task_id="task_001", goal="Resolve duplicate charge ticket."),
         scenario_id="support_001",
         ticket_id="t_001",
+        initial_state=initial_state,
     )
 
 
@@ -835,8 +946,16 @@ class RecordingModelDecisionClient:
         return self.decision
 
 
-def runner_config(tmp_path, max_steps: int = 12) -> RunnerConfig:
-    return RunnerConfig(max_steps=max_steps, trace_path=tmp_path / "trace.jsonl")
+def runner_config(
+    tmp_path,
+    max_steps: int = 12,
+    max_retries_per_error_type: int = 2,
+) -> RunnerConfig:
+    return RunnerConfig(
+        max_steps=max_steps,
+        max_retries_per_error_type=max_retries_per_error_type,
+        trace_path=tmp_path / "trace.jsonl",
+    )
 
 
 def read_trace_events(trace_path):

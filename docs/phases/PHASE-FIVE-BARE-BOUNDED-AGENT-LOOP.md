@@ -101,12 +101,12 @@ Phase Five is complete when:
   - [x] Update retry counters
   - [x] Write trace events for decisions, tool calls, observations, retries, and terminal states
   - [x] Add trace/state tests
-- [ ] Milestone 5.8 - Budget And Retry Enforcement
-  - [ ] Enforce max step budget before executing another action
-  - [ ] Enforce max retry budget by failure type
-  - [ ] Emit `failed_budget_exceeded` when needed
-  - [ ] Emit `blocked_tool_error` or `failed_unrecoverable` when retry recovery fails
-  - [ ] Add budget and retry tests
+- [x] Milestone 5.8 - Budget And Retry Enforcement
+  - [x] Enforce max step budget before executing another action
+  - [x] Enforce max retry budget by failure type
+  - [x] Emit `failed_budget_exceeded` when needed
+  - [x] Emit `blocked_tool_error` or `failed_unrecoverable` when retry recovery fails
+  - [x] Add budget and retry tests
 - [ ] Milestone 5.9 - Terminal Result Persistence
   - [ ] Convert terminal actions into `TerminalResult`
   - [ ] Populate state-specific terminal fields
