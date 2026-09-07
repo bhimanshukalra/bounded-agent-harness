@@ -73,13 +73,13 @@ Phase Five is complete when:
   - [x] Include relevant safety and budget constraints
   - [x] Exclude raw database access
   - [x] Add prompt/context tests
-- [ ] Milestone 5.4 - Decision Source And Parser
-  - [ ] Define decision source protocol
-  - [ ] Implement deterministic mocked decision source
-  - [ ] Define model-backed decision source boundary
-  - [ ] Parse structured action decisions
-  - [ ] Reject malformed decisions
-  - [ ] Add parser tests
+- [x] Milestone 5.4 - Decision Source And Parser
+  - [x] Define decision source protocol
+  - [x] Implement deterministic mocked decision source
+  - [x] Define model-backed decision source boundary
+  - [x] Parse structured action decisions
+  - [x] Reject malformed decisions
+  - [x] Add parser tests
 - [ ] Milestone 5.5 - Action Validation
   - [ ] Validate action type
   - [ ] Validate tool call name against registry

@@ -8,9 +8,13 @@ from bounded_agent.evals import load_scenario
 from bounded_agent.loop import (
     ActionDecision,
     AgentRunner,
+    DecisionParseError,
+    DeterministicDecisionSource,
+    ModelBackedDecisionSource,
     RunnerConfig,
     RunnerRequest,
     build_bounded_context,
+    parse_action_decision,
     scenario_ticket_id,
 )
 from bounded_agent.state import connect_database
@@ -211,6 +215,84 @@ def test_bounded_context_payload_contains_decision_inputs_without_raw_db_path():
     assert payload["scenario"]["initial_state"]["ticket_id"] == "t_001"
 
 
+def test_parse_action_decision_accepts_dict_payload():
+    decision = parse_action_decision(resolved_decision_payload())
+
+    assert decision.action.terminal_state is TerminalState.RESOLVED
+    assert decision.stop_reason == "done"
+
+
+def test_parse_action_decision_accepts_json_payload():
+    raw_json = ActionDecision.model_validate(resolved_decision_payload()).model_dump_json()
+
+    decision = parse_action_decision(raw_json)
+
+    assert decision.action.terminal_state is TerminalState.RESOLVED
+
+
+def test_parse_action_decision_rejects_malformed_payload():
+    with pytest.raises(DecisionParseError, match="invalid action decision"):
+        parse_action_decision(
+            {
+                "thought_summary": "Missing safety and action fields.",
+                "action": {"type": "send_email"},
+            }
+        )
+
+
+def test_deterministic_decision_source_returns_parsed_decisions_in_order():
+    source = DeterministicDecisionSource(
+        [
+            {
+                "thought_summary": "Inspect the ticket first.",
+                "action": {
+                    "type": "tool_call",
+                    "tool_name": "fetch_ticket",
+                    "arguments": {"ticket_id": "t_001"},
+                },
+                "safety_check": {
+                    "permission_level": "read_only",
+                    "approval_required": False,
+                },
+            },
+            resolved_decision_payload(),
+        ]
+    )
+    context = runner_context()
+
+    first = source.decide(context)
+    second = source.decide(context)
+
+    assert first.action.tool_name == "fetch_ticket"
+    assert second.action.terminal_state is TerminalState.RESOLVED
+
+
+def test_deterministic_decision_source_rejects_empty_sequence():
+    with pytest.raises(ValueError, match="at least one decision"):
+        DeterministicDecisionSource([])
+
+
+def test_deterministic_decision_source_rejects_exhausted_sequence():
+    source = DeterministicDecisionSource([resolved_decision_payload()])
+    context = runner_context()
+
+    source.decide(context)
+
+    with pytest.raises(DecisionParseError, match="no remaining decisions"):
+        source.decide(context)
+
+
+def test_model_backed_decision_source_passes_bounded_payload_to_client():
+    client = RecordingModelDecisionClient(resolved_decision_payload())
+    source = ModelBackedDecisionSource(client)
+    context = runner_context()
+
+    decision = source.decide(context)
+
+    assert decision.action.terminal_state is TerminalState.RESOLVED
+    assert client.seen_payloads == [context.bounded_context.to_decision_payload()]
+
+
 def runner_request() -> RunnerRequest:
     return RunnerRequest(
         run_id="run_001",
@@ -221,9 +303,13 @@ def runner_request() -> RunnerRequest:
 
 
 def resolved_decision() -> ActionDecision:
-    return ActionDecision(
-        thought_summary="All required work is complete.",
-        action={
+    return ActionDecision.model_validate(resolved_decision_payload())
+
+
+def resolved_decision_payload():
+    return {
+        "thought_summary": "All required work is complete.",
+        "action": {
             "type": "set_terminal_state",
             "terminal_state": "resolved",
             "summary": "Duplicate charge was resolved.",
@@ -233,12 +319,50 @@ def resolved_decision() -> ActionDecision:
                 "environment_changes": [{"type": "refund", "charge_id": "ch_001_b"}],
             },
         },
-        safety_check={
+        "safety_check": {
             "permission_level": "low_risk_write",
             "approval_required": False,
         },
-        stop_reason="done",
+        "stop_reason": "done",
+    }
+
+
+def runner_context():
+    from bounded_agent.loop import RunnerContext
+
+    request = runner_request()
+    state = AgentState(
+        task_id=request.task.task_id,
+        goal=request.task.goal,
+        scenario_id=request.scenario_id,
+        budget_usage=BudgetUsage(max_steps=5),
     )
+    available_tools = tuple(build_default_registry().list_specs())
+    bounded_context = build_bounded_context(
+        request=request,
+        state=state,
+        observations=[],
+        available_tools=available_tools,
+    )
+    return RunnerContext(
+        request=request,
+        state=state,
+        step=0,
+        observations=(),
+        available_tools=available_tools,
+        budget_usage=state.budget_usage,
+        bounded_context=bounded_context,
+    )
+
+
+class RecordingModelDecisionClient:
+    def __init__(self, decision):
+        self.decision = decision
+        self.seen_payloads = []
+
+    def complete(self, payload):
+        self.seen_payloads.append(payload)
+        return self.decision
 
 
 def successful_observation():

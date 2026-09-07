@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Any, Protocol
 from uuid import uuid4
 
+from pydantic import ValidationError
+
 from bounded_agent.config import Settings, load_settings
 from bounded_agent.domain import (
     AgentState,
@@ -29,6 +31,40 @@ SAFETY_CONSTRAINTS = (
 class DecisionSource(Protocol):
     def decide(self, context: "RunnerContext") -> ActionDecision:
         """Choose the next structured action for the current loop step."""
+
+
+class ModelDecisionClient(Protocol):
+    def complete(self, payload: dict[str, Any]) -> dict[str, Any] | str:
+        """Return a raw structured decision from a model provider boundary."""
+
+
+class DecisionParseError(ValueError):
+    pass
+
+
+class DeterministicDecisionSource:
+    def __init__(self, decisions: Sequence[ActionDecision | dict[str, Any] | str]) -> None:
+        if not decisions:
+            raise ValueError("deterministic decision source requires at least one decision")
+        self._decisions = tuple(decisions)
+        self._index = 0
+
+    def decide(self, context: "RunnerContext") -> ActionDecision:
+        del context
+        if self._index >= len(self._decisions):
+            raise DecisionParseError("deterministic decision source has no remaining decisions")
+
+        raw_decision = self._decisions[self._index]
+        self._index += 1
+        return parse_action_decision(raw_decision)
+
+
+class ModelBackedDecisionSource:
+    def __init__(self, client: ModelDecisionClient) -> None:
+        self.client = client
+
+    def decide(self, context: "RunnerContext") -> ActionDecision:
+        return parse_action_decision(self.client.complete(context.bounded_context.to_decision_payload()))
 
 
 @dataclass(frozen=True)
@@ -242,6 +278,17 @@ def scenario_ticket_id(scenario: Scenario) -> str:
     if not isinstance(ticket_id, str) or not ticket_id.strip():
         raise ValueError(f"scenario does not define initial_state.ticket_id: {scenario.id}")
     return ticket_id
+
+
+def parse_action_decision(raw_decision: ActionDecision | dict[str, Any] | str) -> ActionDecision:
+    try:
+        if isinstance(raw_decision, ActionDecision):
+            return raw_decision
+        if isinstance(raw_decision, str):
+            return ActionDecision.model_validate_json(raw_decision)
+        return ActionDecision.model_validate(raw_decision)
+    except ValidationError as exc:
+        raise DecisionParseError(f"invalid action decision: {exc}") from exc
 
 
 def build_bounded_context(

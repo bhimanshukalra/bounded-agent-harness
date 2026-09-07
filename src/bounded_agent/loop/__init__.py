@@ -10,12 +10,17 @@ from bounded_agent.loop.actions import (
 from bounded_agent.loop.runner import (
     AgentRunner,
     BoundedContext,
+    DecisionParseError,
     DecisionSource,
+    DeterministicDecisionSource,
+    ModelBackedDecisionSource,
+    ModelDecisionClient,
     RunnerConfig,
     RunnerContext,
     RunnerRequest,
     RunnerResult,
     build_bounded_context,
+    parse_action_decision,
     scenario_ticket_id,
 )
 
@@ -24,7 +29,11 @@ __all__ = [
     "AgentRunner",
     "ApprovalRequestAction",
     "BoundedContext",
+    "DecisionParseError",
     "DecisionSource",
+    "DeterministicDecisionSource",
+    "ModelBackedDecisionSource",
+    "ModelDecisionClient",
     "ReplanAction",
     "RetryAction",
     "RunnerConfig",
@@ -35,5 +44,6 @@ __all__ = [
     "TerminalStateAction",
     "ToolCallAction",
     "build_bounded_context",
+    "parse_action_decision",
     "scenario_ticket_id",
 ]
