@@ -113,13 +113,13 @@ Phase Five is complete when:
   - [x] Persist terminal result to run output path
   - [x] Persist trace path on terminal result
   - [x] Add terminal persistence tests
-- [ ] Milestone 5.10 - Manual Scenario Readiness Review
-  - [ ] Run at least five manual scenarios
-  - [ ] Confirm multi-step runs work
-  - [ ] Confirm named terminal states are produced
-  - [ ] Confirm state and traces are written
-  - [ ] Confirm tests and lint pass
-  - [ ] Write Phase Five completion note
+- [x] Milestone 5.10 - Manual Scenario Readiness Review
+  - [x] Run at least five manual scenarios
+  - [x] Confirm multi-step runs work
+  - [x] Confirm named terminal states are produced
+  - [x] Confirm state and traces are written
+  - [x] Confirm tests and lint pass
+  - [x] Write Phase Five completion note
 
 ## Milestone 5.1 - Runner Boundary And Control Flow
 
@@ -306,16 +306,46 @@ Run at least five scenarios covering:
 
 ### Phase Five Completion Note
 
-Write this after implementation is complete.
+Phase Five is complete. The bare bounded agent loop now has a deterministic runner boundary,
+scenario-backed state loading, a structured bounded context, decision-source parsing, action
+validation, registry-only tool execution, observation recording, state updates, JSONL trace writing,
+step and retry budget enforcement, and terminal result persistence.
 
-Phase Five completion should record:
+Implementation added `src/bounded_agent/loop/runner.py` with:
 
-- what runner modules were added
-- which decision source was implemented first
-- which scenarios were manually exercised
-- test and lint results
-- known limitations deferred to later phases
-- Phase Six entry point
+- `AgentRunner`
+- `RunnerConfig`, `RunnerRequest`, `RunnerContext`, and `RunnerResult`
+- `BoundedContext` and `build_bounded_context`
+- `DecisionSource`, `DeterministicDecisionSource`, and `ModelBackedDecisionSource`
+- `parse_action_decision`
+- `validate_action_decision`
+- registry-backed tool execution and observation helpers
+- trace and terminal-result persistence helpers
+
+The first implemented decision source is deterministic. This lets tests and manual scenario runs
+exercise loop control flow without depending on a live model. `ModelBackedDecisionSource` defines the
+future provider boundary by passing `BoundedContext.to_decision_payload()` to a model client and
+parsing the returned structured action decision.
+
+Manual scenario readiness was exercised with deterministic decisions:
+
+- `support_001` -> `needs_human_approval`, 6 steps, 5 observations, 19 trace events, result persisted
+- `support_002` -> `resolved`, 6 steps, 6 observations, 20 trace events, result persisted
+- `support_003` -> `blocked_missing_information`, 3 steps, 3 observations, 11 trace events, result persisted
+- `support_005` -> `escalated`, 5 steps, 5 observations, 17 trace events, result persisted
+- `support_006` -> `needs_human_approval`, 8 steps, 6 observations, timeout retry path, 24 trace events, result persisted
+- `support_010` -> `failed_budget_exceeded`, 3 steps, 3 observations, 10 trace events, result persisted
+
+Known limitations deferred to later phases:
+
+- the model-backed decision source boundary exists, but no live model provider is wired yet
+- approval-request actions update runner state but do not yet call the `request_approval` tool path
+- retry actions update state and trace events, but the next actual tool call is still selected by the decision source
+- terminal result persistence is local JSON rather than an eval-run aggregation layer
+- independent verifier and report generation remain later-phase work
+
+Phase Six can begin by exposing `AgentRunner.run_scenario` through the MCP server and mapping MCP
+requests to deterministic or model-backed decision sources.
 
 ## Phase Five Outputs
 
