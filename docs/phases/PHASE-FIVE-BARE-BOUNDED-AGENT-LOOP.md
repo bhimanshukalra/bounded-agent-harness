@@ -94,13 +94,13 @@ Phase Five is complete when:
   - [x] Record structured tool errors
   - [x] Preserve idempotency behavior for mutating tools
   - [x] Add registry-integration tests
-- [ ] Milestone 5.7 - State Updates And Trace Writing
-  - [ ] Append completed actions
-  - [ ] Append tool call history
-  - [ ] Track pending approval IDs
-  - [ ] Update retry counters
-  - [ ] Write trace events for decisions, tool calls, observations, retries, and terminal states
-  - [ ] Add trace/state tests
+- [x] Milestone 5.7 - State Updates And Trace Writing
+  - [x] Append completed actions
+  - [x] Append tool call history
+  - [x] Track pending approval IDs
+  - [x] Update retry counters
+  - [x] Write trace events for decisions, tool calls, observations, retries, and terminal states
+  - [x] Add trace/state tests
 - [ ] Milestone 5.8 - Budget And Retry Enforcement
   - [ ] Enforce max step budget before executing another action
   - [ ] Enforce max retry budget by failure type

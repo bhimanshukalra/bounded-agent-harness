@@ -1,4 +1,4 @@
-from pathlib import Path
+import json
 
 import pytest
 
@@ -32,11 +32,11 @@ class StaticDecisionSource:
         return self.decision
 
 
-def test_runner_builds_initial_context_for_decision_source():
+def test_runner_builds_initial_context_for_decision_source(tmp_path):
     decision_source = StaticDecisionSource(resolved_decision())
     runner = AgentRunner(
         decision_source,
-        config=RunnerConfig(trace_path=Path("data/runs/run_001/trace.jsonl")),
+        config=runner_config(tmp_path),
     )
     request = runner_request()
 
@@ -56,10 +56,11 @@ def test_runner_builds_initial_context_for_decision_source():
     assert {tool.name for tool in context.available_tools} >= {"fetch_ticket", "request_approval"}
 
 
-def test_runner_converts_terminal_action_to_terminal_result():
+def test_runner_converts_terminal_action_to_terminal_result(tmp_path):
+    config = runner_config(tmp_path)
     runner = AgentRunner(
         StaticDecisionSource(resolved_decision()),
-        config=RunnerConfig(trace_path=Path("data/runs/run_001/trace.jsonl")),
+        config=config,
     )
 
     result = runner.run(runner_request())
@@ -70,10 +71,10 @@ def test_runner_converts_terminal_action_to_terminal_result():
     assert result.terminal_result.resolution_summary == "Refund and customer draft completed."
     assert result.terminal_result.final_ticket_status == "resolved"
     assert result.terminal_result.environment_changes == [{"type": "refund", "charge_id": "ch_001_b"}]
-    assert result.terminal_result.trace_path == Path("data/runs/run_001/trace.jsonl")
+    assert result.terminal_result.trace_path == config.trace_path
 
 
-def test_runner_fails_closed_for_non_terminal_actions_until_execution_is_implemented():
+def test_runner_fails_closed_for_non_terminal_actions_until_execution_is_implemented(tmp_path):
     decision = ActionDecision(
         thought_summary="Need to inspect the ticket.",
         action={
@@ -88,7 +89,7 @@ def test_runner_fails_closed_for_non_terminal_actions_until_execution_is_impleme
     )
     runner = AgentRunner(
         StaticDecisionSource(decision),
-        config=RunnerConfig(trace_path=Path("data/runs/run_001/trace.jsonl")),
+        config=runner_config(tmp_path),
     )
 
     result = runner.run(runner_request())
@@ -100,7 +101,7 @@ def test_runner_fails_closed_for_non_terminal_actions_until_execution_is_impleme
     assert result.terminal_result.trace_event_id.startswith("trace_")
 
 
-def test_runner_stops_with_invalid_tool_call_for_failed_action_validation():
+def test_runner_stops_with_invalid_tool_call_for_failed_action_validation(tmp_path):
     decision = ActionDecision(
         thought_summary="Fetch the ticket.",
         action={
@@ -115,7 +116,7 @@ def test_runner_stops_with_invalid_tool_call_for_failed_action_validation():
     )
     runner = AgentRunner(
         StaticDecisionSource(decision),
-        config=RunnerConfig(trace_path=Path("data/runs/run_001/trace.jsonl")),
+        config=runner_config(tmp_path),
     )
 
     result = runner.run(runner_request())
@@ -147,7 +148,7 @@ def test_runner_executes_tool_call_through_registry_and_records_observation(tmp_
     )
     runner = AgentRunner(
         source,
-        config=RunnerConfig(trace_path=Path("data/runs/run_001/trace.jsonl")),
+        config=runner_config(tmp_path),
         settings=settings,
     )
 
@@ -185,7 +186,7 @@ def test_runner_records_structured_tool_error_observation(tmp_path):
     )
     runner = AgentRunner(
         source,
-        config=RunnerConfig(trace_path=Path("data/runs/run_001/trace.jsonl")),
+        config=runner_config(tmp_path),
         settings=settings,
     )
 
@@ -224,7 +225,7 @@ def test_runner_preserves_mutating_tool_idempotency(tmp_path):
     )
     runner = AgentRunner(
         source,
-        config=RunnerConfig(trace_path=Path("data/runs/run_001/trace.jsonl")),
+        config=runner_config(tmp_path),
         settings=settings,
     )
 
@@ -242,6 +243,101 @@ def test_runner_preserves_mutating_tool_idempotency(tmp_path):
         assert connection.execute("SELECT COUNT(*) FROM idempotency_keys").fetchone()[0] == 1
     finally:
         connection.close()
+
+
+def test_runner_updates_state_after_tool_calls_and_errors(tmp_path):
+    settings = Settings(_env_file=None, runs_dir=tmp_path / "runs")
+    source = DeterministicDecisionSource(
+        [
+            {
+                "thought_summary": "Fetch a missing order.",
+                "action": {
+                    "type": "tool_call",
+                    "tool_name": "fetch_order",
+                    "arguments": {"order_id": "o_missing"},
+                },
+                "safety_check": {
+                    "permission_level": "read_only",
+                    "approval_required": False,
+                },
+            },
+            blocked_tool_error_decision_payload(),
+        ]
+    )
+    runner = AgentRunner(source, config=runner_config(tmp_path), settings=settings)
+
+    result = runner.run_scenario("support_001", "run_001")
+
+    assert result.state.completed_actions == ["fetch_order"]
+    assert result.state.tool_call_history == [
+        {
+            "tool_name": "fetch_order",
+            "arguments": {"order_id": "o_missing"},
+            "ok": False,
+        }
+    ]
+    assert result.state.retries_by_failure_type == {ErrorType.NOT_FOUND: 1}
+    assert result.state.current_status == "observed:fetch_order"
+
+
+def test_runner_tracks_pending_approval_requests(tmp_path):
+    source = DeterministicDecisionSource(
+        [
+            approval_request_decision_payload(),
+            needs_human_approval_decision_payload(),
+        ]
+    )
+    runner = AgentRunner(source, config=runner_config(tmp_path))
+
+    result = runner.run(runner_request())
+
+    assert result.state.pending_approval_ids == ["run_001:approval:apply_refund:1"]
+    assert result.state.completed_actions == ["request_approval"]
+    assert result.state.budget_usage.steps == 1
+    assert result.state.current_status == "approval_requested"
+    assert result.terminal_result.terminal_state is TerminalState.NEEDS_HUMAN_APPROVAL
+
+
+def test_runner_writes_trace_events_for_decisions_tools_observations_and_terminal(tmp_path):
+    settings = Settings(_env_file=None, runs_dir=tmp_path / "runs")
+    source = DeterministicDecisionSource(
+        [
+            {
+                "thought_summary": "Inspect the ticket.",
+                "action": {
+                    "type": "tool_call",
+                    "tool_name": "fetch_ticket",
+                    "arguments": {"ticket_id": "t_001"},
+                },
+                "safety_check": {
+                    "permission_level": "read_only",
+                    "approval_required": False,
+                },
+            },
+            resolved_decision_payload(),
+        ]
+    )
+    config = runner_config(tmp_path)
+    runner = AgentRunner(source, config=config, settings=settings)
+
+    runner.run_scenario("support_001", "run_001")
+
+    events = read_trace_events(config.trace_path)
+    assert [event["event_type"] for event in events] == [
+        "decision",
+        "tool_call",
+        "observation",
+        "decision",
+        "terminal_state",
+    ]
+    assert events[0]["payload"]["action"]["tool_name"] == "fetch_ticket"
+    assert events[1]["payload"] == {
+        "arguments": {"ticket_id": "t_001"},
+        "ok": True,
+        "tool_name": "fetch_ticket",
+    }
+    assert events[2]["payload"]["ok"] is True
+    assert events[-1]["payload"]["terminal_state"] == "resolved"
 
 
 def test_runner_request_rejects_blank_run_id():
@@ -264,7 +360,7 @@ def test_runner_loads_scenario_and_resets_environment(tmp_path):
     decision_source = StaticDecisionSource(resolved_decision())
     runner = AgentRunner(
         decision_source,
-        config=RunnerConfig(max_steps=7, trace_path=Path("data/runs/run_001/trace.jsonl")),
+        config=runner_config(tmp_path, max_steps=7),
         settings=settings,
     )
 
@@ -657,6 +753,50 @@ def blocked_tool_error_decision_payload():
     }
 
 
+def approval_request_decision_payload():
+    return {
+        "thought_summary": "Request approval before applying a refund.",
+        "action": {
+            "type": "request_approval",
+            "action_type": "apply_refund",
+            "target": {"ticket_id": "t_001", "charge_id": "ch_001_b"},
+            "proposed_arguments": {
+                "charge_id": "ch_001_b",
+                "amount": 49.0,
+                "currency": "USD",
+                "reason": "duplicate_charge",
+            },
+            "evidence_summary": ["Duplicate successful charge confirmed."],
+            "risk_summary": "Refund mutates billing state.",
+        },
+        "safety_check": {
+            "permission_level": "approval_required",
+            "approval_required": True,
+        },
+    }
+
+
+def needs_human_approval_decision_payload():
+    return {
+        "thought_summary": "Approval has been requested and the run should stop.",
+        "action": {
+            "type": "set_terminal_state",
+            "terminal_state": "needs_human_approval",
+            "summary": "Refund approval is pending.",
+            "fields": {
+                "approval_request_id": "run_001:approval:apply_refund:1",
+                "proposed_action": "apply_refund",
+                "risk_summary": "Refund mutates billing state.",
+            },
+        },
+        "safety_check": {
+            "permission_level": "approval_required",
+            "approval_required": True,
+        },
+        "stop_reason": "approval_required",
+    }
+
+
 def runner_context():
     from bounded_agent.loop import RunnerContext
 
@@ -693,6 +833,14 @@ class RecordingModelDecisionClient:
     def complete(self, payload):
         self.seen_payloads.append(payload)
         return self.decision
+
+
+def runner_config(tmp_path, max_steps: int = 12) -> RunnerConfig:
+    return RunnerConfig(max_steps=max_steps, trace_path=tmp_path / "trace.jsonl")
+
+
+def read_trace_events(trace_path):
+    return [json.loads(line) for line in trace_path.read_text().splitlines()]
 
 
 def successful_observation():

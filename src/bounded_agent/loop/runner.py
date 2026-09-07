@@ -1,3 +1,4 @@
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,10 +11,12 @@ from bounded_agent.config import Settings, load_settings
 from bounded_agent.domain import (
     AgentState,
     BudgetUsage,
+    RunError,
     Scenario,
     Task,
     TerminalResult,
     TerminalState,
+    TraceEvent,
 )
 from bounded_agent.evals import load_scenario
 from bounded_agent.loop.actions import (
@@ -231,6 +234,21 @@ class AgentRunner:
                 db_path=db_path,
             )
             decision = self.decision_source.decide(context)
+            write_trace_event(
+                self.config.trace_path,
+                TraceEvent(
+                    run_id=request.run_id,
+                    scenario_id=request.scenario_id,
+                    step=state.budget_usage.steps,
+                    event_type="decision",
+                    payload={
+                        "thought_summary": decision.thought_summary,
+                        "action": decision.action.model_dump(mode="json"),
+                        "safety_check": decision.safety_check.model_dump(mode="json"),
+                        "stop_reason": decision.stop_reason,
+                    },
+                ),
+            )
             validation = validate_action_decision(decision, self.registry)
 
             if not validation.valid:
@@ -245,13 +263,85 @@ class AgentRunner:
                     break
                 observation = self._execute_tool_action(request, db_path, decision.action)
                 observations = (*observations, observation)
-                state = increment_step_count(state)
+                state = update_state_after_tool_action(state, decision.action, observation)
+                write_trace_event(
+                    self.config.trace_path,
+                    TraceEvent(
+                        run_id=request.run_id,
+                        scenario_id=request.scenario_id,
+                        step=state.budget_usage.steps,
+                        event_type="tool_call",
+                        payload={
+                            "tool_name": decision.action.tool_name,
+                            "arguments": decision.action.arguments,
+                            "ok": observation.tool_result.ok,
+                        },
+                    ),
+                )
+                write_trace_event(
+                    self.config.trace_path,
+                    TraceEvent(
+                        run_id=request.run_id,
+                        scenario_id=request.scenario_id,
+                        step=state.budget_usage.steps,
+                        event_type="observation",
+                        payload=observation_payload(observation),
+                        error=run_error_from_tool_result(observation.tool_result),
+                    ),
+                )
+                continue
+            if isinstance(decision.action, ApprovalRequestAction):
+                state = update_state_after_approval_request(state, request.run_id, decision.action)
+                write_trace_event(
+                    self.config.trace_path,
+                    TraceEvent(
+                        run_id=request.run_id,
+                        scenario_id=request.scenario_id,
+                        step=state.budget_usage.steps,
+                        event_type="approval_request",
+                        payload={
+                            "approval_id": state.pending_approval_ids[-1],
+                            "action_type": decision.action.action_type,
+                            "target": decision.action.target,
+                        },
+                    ),
+                )
+                continue
+            if isinstance(decision.action, RetryAction):
+                state = update_state_after_retry(state, decision.action)
+                write_trace_event(
+                    self.config.trace_path,
+                    TraceEvent(
+                        run_id=request.run_id,
+                        scenario_id=request.scenario_id,
+                        step=state.budget_usage.steps,
+                        event_type="retry",
+                        payload={
+                            "failed_tool": decision.action.failed_tool,
+                            "error_type": decision.action.error_type.value,
+                            "retry_reason": decision.action.retry_reason,
+                        },
+                    ),
+                )
                 continue
 
             terminal_result = self._unsupported_action_result(request, state, decision)
             break
 
         terminal_state = state.model_copy(update={"terminal_state": terminal_result.terminal_state})
+        write_trace_event(
+            self.config.trace_path,
+            TraceEvent(
+                run_id=request.run_id,
+                scenario_id=request.scenario_id,
+                step=terminal_state.budget_usage.steps,
+                event_type="terminal_state",
+                payload={
+                    "terminal_state": terminal_result.terminal_state.value,
+                    "summary": terminal_result.summary,
+                },
+            ),
+        )
         return RunnerResult(
             terminal_result=terminal_result,
             state=terminal_state,
@@ -405,6 +495,65 @@ def increment_step_count(state: AgentState) -> AgentState:
     return state.model_copy(update={"budget_usage": next_budget})
 
 
+def update_state_after_tool_action(
+    state: AgentState,
+    action: ToolCallAction,
+    observation: Observation,
+) -> AgentState:
+    updated_state = increment_step_count(state)
+    completed_actions = [*updated_state.completed_actions, action.tool_name]
+    tool_call_history = [
+        *updated_state.tool_call_history,
+        {
+            "tool_name": action.tool_name,
+            "arguments": action.arguments,
+            "ok": observation.tool_result.ok,
+        },
+    ]
+    retries_by_failure_type = dict(updated_state.retries_by_failure_type)
+    if observation.tool_result.error is not None:
+        error_type = observation.tool_result.error.type
+        retries_by_failure_type[error_type] = retries_by_failure_type.get(error_type, 0) + 1
+
+    return updated_state.model_copy(
+        update={
+            "current_status": f"observed:{action.tool_name}",
+            "completed_actions": completed_actions,
+            "tool_call_history": tool_call_history,
+            "retries_by_failure_type": retries_by_failure_type,
+        }
+    )
+
+
+def update_state_after_approval_request(
+    state: AgentState,
+    run_id: str,
+    action: ApprovalRequestAction,
+) -> AgentState:
+    updated_state = increment_step_count(state)
+    approval_id = f"{run_id}:approval:{action.action_type}:{len(state.pending_approval_ids) + 1}"
+    return updated_state.model_copy(
+        update={
+            "current_status": "approval_requested",
+            "completed_actions": [*updated_state.completed_actions, "request_approval"],
+            "pending_approval_ids": [*updated_state.pending_approval_ids, approval_id],
+        }
+    )
+
+
+def update_state_after_retry(state: AgentState, action: RetryAction) -> AgentState:
+    updated_state = increment_step_count(state)
+    retries_by_failure_type = dict(updated_state.retries_by_failure_type)
+    retries_by_failure_type[action.error_type] = retries_by_failure_type.get(action.error_type, 0) + 1
+    return updated_state.model_copy(
+        update={
+            "current_status": f"retrying:{action.failed_tool}",
+            "completed_actions": [*updated_state.completed_actions, "retry"],
+            "retries_by_failure_type": retries_by_failure_type,
+        }
+    )
+
+
 def tool_idempotency_key(run_id: str, action: ToolCallAction) -> str:
     return f"{run_id}:{action.tool_name}:{hash_arguments(action.arguments)}"
 
@@ -429,6 +578,24 @@ def observation_from_tool_result(tool_name: str, result: ToolResult) -> Observat
             "details": result.error.details,
         },
     )
+
+
+def run_error_from_tool_result(result: ToolResult) -> RunError | None:
+    if result.error is None:
+        return None
+    return RunError(
+        type=result.error.type,
+        message=result.error.message,
+        retryable=result.error.retryable,
+        details=result.error.details,
+    )
+
+
+def write_trace_event(trace_path: Path, event: TraceEvent) -> None:
+    trace_path.parent.mkdir(parents=True, exist_ok=True)
+    with trace_path.open("a", encoding="utf-8") as trace_file:
+        trace_file.write(json.dumps(event.model_dump(mode="json"), sort_keys=True))
+        trace_file.write("\n")
 
 
 def parse_action_decision(raw_decision: ActionDecision | dict[str, Any] | str) -> ActionDecision:
