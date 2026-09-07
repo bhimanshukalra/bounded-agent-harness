@@ -107,12 +107,12 @@ Phase Five is complete when:
   - [x] Emit `failed_budget_exceeded` when needed
   - [x] Emit `blocked_tool_error` or `failed_unrecoverable` when retry recovery fails
   - [x] Add budget and retry tests
-- [ ] Milestone 5.9 - Terminal Result Persistence
-  - [ ] Convert terminal actions into `TerminalResult`
-  - [ ] Populate state-specific terminal fields
-  - [ ] Persist terminal result to run output path
-  - [ ] Persist trace path on terminal result
-  - [ ] Add terminal persistence tests
+- [x] Milestone 5.9 - Terminal Result Persistence
+  - [x] Convert terminal actions into `TerminalResult`
+  - [x] Populate state-specific terminal fields
+  - [x] Persist terminal result to run output path
+  - [x] Persist trace path on terminal result
+  - [x] Add terminal persistence tests
 - [ ] Milestone 5.10 - Manual Scenario Readiness Review
   - [ ] Run at least five manual scenarios
   - [ ] Confirm multi-step runs work

@@ -97,6 +97,7 @@ class RunnerConfig:
     max_steps: int = 12
     max_retries_per_error_type: int = 2
     trace_path: Path = Path("data/runs/trace.jsonl")
+    result_path: Path | None = None
 
     def __post_init__(self) -> None:
         if self.max_steps < 1:
@@ -182,6 +183,7 @@ class RunnerResult:
     observations: Sequence[Observation] = field(default_factory=tuple)
     scenario: Scenario | None = None
     db_path: Path | None = None
+    result_path: Path | None = None
 
 
 class AgentRunner:
@@ -224,6 +226,7 @@ class AgentRunner:
         )
         observations: tuple[Observation, ...] = ()
         db_path = reset_result.db_path if reset_result is not None else None
+        result_path = terminal_result_path(self.config, reset_result)
 
         while True:
             budget_terminal_result = self._budget_terminal_result(request, state)
@@ -352,12 +355,14 @@ class AgentRunner:
                 },
             ),
         )
+        persist_terminal_result(result_path, terminal_result)
         return RunnerResult(
             terminal_result=terminal_result,
             state=terminal_state,
             observations=observations,
             scenario=scenario,
             db_path=db_path,
+            result_path=result_path,
         )
 
     def _build_runner_context(
@@ -691,6 +696,22 @@ def write_trace_event(trace_path: Path, event: TraceEvent) -> None:
     with trace_path.open("a", encoding="utf-8") as trace_file:
         trace_file.write(json.dumps(event.model_dump(mode="json"), sort_keys=True))
         trace_file.write("\n")
+
+
+def terminal_result_path(config: RunnerConfig, reset_result: ResetResult | None) -> Path:
+    if config.result_path is not None:
+        return config.result_path
+    if reset_result is not None:
+        return reset_result.db_path.parent / "result.json"
+    return config.trace_path.with_name("result.json")
+
+
+def persist_terminal_result(result_path: Path, terminal_result: TerminalResult) -> None:
+    result_path.parent.mkdir(parents=True, exist_ok=True)
+    result_path.write_text(
+        json.dumps(terminal_result.model_dump(mode="json"), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def parse_action_decision(raw_decision: ActionDecision | dict[str, Any] | str) -> ActionDecision:

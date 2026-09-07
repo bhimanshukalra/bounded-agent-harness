@@ -340,6 +340,42 @@ def test_runner_writes_trace_events_for_decisions_tools_observations_and_termina
     assert events[-1]["payload"]["terminal_state"] == "resolved"
 
 
+def test_runner_persists_terminal_result_to_default_run_output_path(tmp_path):
+    settings = Settings(_env_file=None, runs_dir=tmp_path / "runs")
+    runner = AgentRunner(
+        DeterministicDecisionSource([resolved_decision_payload()]),
+        config=runner_config(tmp_path),
+        settings=settings,
+    )
+
+    result = runner.run_scenario("support_001", "run_001")
+
+    assert result.result_path == tmp_path / "runs" / "run_001" / "result.json"
+    persisted = json.loads(result.result_path.read_text())
+    assert persisted["run_id"] == "run_001"
+    assert persisted["scenario_id"] == "support_001"
+    assert persisted["ticket_id"] == "t_001"
+    assert persisted["terminal_state"] == "resolved"
+    assert persisted["trace_path"] == str(result.terminal_result.trace_path)
+    assert persisted["resolution_summary"] == "Refund and customer draft completed."
+    assert persisted["final_ticket_status"] == "resolved"
+    assert persisted["environment_changes"] == [{"type": "refund", "charge_id": "ch_001_b"}]
+
+
+def test_runner_persists_terminal_result_to_custom_result_path(tmp_path):
+    result_path = tmp_path / "custom" / "terminal.json"
+    runner = AgentRunner(
+        StaticDecisionSource(resolved_decision()),
+        config=RunnerConfig(trace_path=tmp_path / "trace.jsonl", result_path=result_path),
+    )
+
+    result = runner.run(runner_request())
+
+    assert result.result_path == result_path
+    assert result_path.exists()
+    assert json.loads(result_path.read_text())["terminal_state"] == "resolved"
+
+
 def test_runner_stops_before_decision_when_step_budget_is_exhausted(tmp_path):
     initial_state = AgentState(
         task_id="task_001",
