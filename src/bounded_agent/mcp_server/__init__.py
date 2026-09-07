@@ -1,3 +1,9 @@
+from bounded_agent.mcp_server.handlers import (
+    PolicyKnowledgeHandlers,
+    call_get_policy_detail,
+    call_search_knowledge_base,
+    policy_match,
+)
 from bounded_agent.mcp_server.schemas import (
     GetPolicyDetailInput,
     GetPolicyDetailOutput,
@@ -34,10 +40,14 @@ __all__ = [
     "McpServerCapabilities",
     "McpServerHealth",
     "McpToolRegistration",
+    "PolicyKnowledgeHandlers",
     "SearchKnowledgeBaseInput",
     "SearchKnowledgeBaseOutput",
     "StrictMcpSchema",
     "build_local_mcp_server",
+    "call_get_policy_detail",
+    "call_search_knowledge_base",
     "mcp_validation_error_details",
+    "policy_match",
     "validate_mcp_schema",
 ]

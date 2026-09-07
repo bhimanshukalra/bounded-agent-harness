@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from bounded_agent.domain import ErrorType
 
@@ -22,6 +22,14 @@ class SearchKnowledgeBaseInput(StrictMcpSchema):
     query: str = Field(min_length=1)
     limit: int = Field(default=5, ge=1, le=50)
 
+    @field_validator("query")
+    @classmethod
+    def normalize_query(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("query cannot be blank")
+        return normalized
+
 
 class SearchKnowledgeBaseOutput(StrictMcpSchema):
     query: str = Field(min_length=1)
@@ -31,6 +39,14 @@ class SearchKnowledgeBaseOutput(StrictMcpSchema):
 
 class GetPolicyDetailInput(StrictMcpSchema):
     policy_id: str = Field(min_length=1)
+
+    @field_validator("policy_id")
+    @classmethod
+    def normalize_policy_id(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("policy_id cannot be blank")
+        return normalized
 
 
 class GetPolicyDetailOutput(StrictMcpSchema):

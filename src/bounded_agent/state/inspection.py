@@ -84,6 +84,18 @@ def search_policies(connection: sqlite3.Connection, query: str) -> list[dict[str
     )
 
 
+def get_policy(connection: sqlite3.Connection, policy_id: str) -> dict[str, Any] | None:
+    return fetch_one(
+        connection,
+        """
+        SELECT *
+        FROM policies
+        WHERE policy_id = ?
+        """,
+        (policy_id,),
+    )
+
+
 def get_approvals_for_ticket(
     connection: sqlite3.Connection,
     ticket_id: str,

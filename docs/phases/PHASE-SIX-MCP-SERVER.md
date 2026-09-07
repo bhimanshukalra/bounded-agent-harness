@@ -72,12 +72,12 @@ Phase Six is complete when:
   - [x] Return health or capability metadata
   - [x] Add server construction tests
 - [ ] Milestone 6.4 - Policy And Knowledge Handlers
-  - [ ] Implement `search_knowledge_base`
-  - [ ] Implement `get_policy_detail`
-  - [ ] Serve data from policy fixtures or SQLite
-  - [ ] Normalize matching and response ordering
-  - [ ] Return structured not-found errors
-  - [ ] Add handler tests
+  - [x] Implement `search_knowledge_base`
+  - [x] Implement `get_policy_detail`
+  - [x] Serve data from policy fixtures or SQLite
+  - [x] Normalize matching and response ordering
+  - [x] Return structured not-found errors
+  - [x] Add handler tests
 - [ ] Milestone 6.5 - MCP Client Wrapper
   - [ ] Add tool-layer MCP client interface
   - [ ] Add local in-process client for tests
@@ -254,6 +254,12 @@ Implement the domain behavior behind the MCP tools.
 `search_knowledge_base` should return deterministic ranked or filtered policy/knowledge matches. `get_policy_detail` should return one policy record by ID or a structured not-found error.
 
 Handlers should use existing fixture or SQLite inspection logic where possible rather than duplicating policy parsing behavior.
+
+### Handler Decision
+
+`PolicyKnowledgeHandlers` seeds an in-memory SQLite database from the configured policy fixture when the local server is constructed. It reuses the existing policy inspection functions for case-insensitive matching and stable category/policy ID ordering, then translates records into MCP schemas.
+
+MCP inputs trim surrounding whitespace and reject whitespace-only values. `search_knowledge_base` reports the full matching count before applying its limit. `get_policy_detail` returns a typed `McpErrorOutput` with `not_found` and the requested `policy_id` when no exact record exists. The server owns handler cleanup through `LocalMcpServer.close()`.
 
 ## Milestone 6.5 - MCP Client Wrapper
 

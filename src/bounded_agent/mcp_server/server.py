@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import Field
 
 from bounded_agent.config import Settings, load_settings
+from bounded_agent.mcp_server.handlers import PolicyKnowledgeHandlers
 from bounded_agent.mcp_server.schemas import StrictMcpSchema
 
 
@@ -59,6 +60,7 @@ class LocalMcpServer:
         self.settings = settings
         self.server_name = server_name
         self._tools = tuple(tools)
+        self.handlers = PolicyKnowledgeHandlers(self.policy_fixture_path)
 
     @property
     def tools(self) -> tuple[McpToolRegistration, ...]:
@@ -86,6 +88,9 @@ class LocalMcpServer:
             policy_fixture_path=self.policy_fixture_path,
             support_fixture_path=self.support_fixture_path,
         )
+
+    def close(self) -> None:
+        self.handlers.close()
 
 
 def build_local_mcp_server(settings: Settings | None = None) -> LocalMcpServer:
