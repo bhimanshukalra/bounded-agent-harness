@@ -67,12 +67,12 @@ Phase Five is complete when:
   - [x] Initialize `AgentState`
   - [x] Initialize `BudgetUsage`
   - [x] Add state-loading tests
-- [ ] Milestone 5.3 - Bounded Context Builder
-  - [ ] Build context from task, state, scenario, and observations
-  - [ ] Include available tool specs from registry
-  - [ ] Include relevant safety and budget constraints
-  - [ ] Exclude raw database access
-  - [ ] Add prompt/context tests
+- [x] Milestone 5.3 - Bounded Context Builder
+  - [x] Build context from task, state, scenario, and observations
+  - [x] Include available tool specs from registry
+  - [x] Include relevant safety and budget constraints
+  - [x] Exclude raw database access
+  - [x] Add prompt/context tests
 - [ ] Milestone 5.4 - Decision Source And Parser
   - [ ] Define decision source protocol
   - [ ] Implement deterministic mocked decision source

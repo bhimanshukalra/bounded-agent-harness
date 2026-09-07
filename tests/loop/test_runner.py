@@ -3,15 +3,18 @@ from pathlib import Path
 import pytest
 
 from bounded_agent.config import Settings
-from bounded_agent.domain import Task, TerminalState
+from bounded_agent.domain import AgentState, BudgetUsage, ErrorType, Task, TerminalState
+from bounded_agent.evals import load_scenario
 from bounded_agent.loop import (
     ActionDecision,
     AgentRunner,
     RunnerConfig,
     RunnerRequest,
+    build_bounded_context,
     scenario_ticket_id,
 )
 from bounded_agent.state import connect_database
+from bounded_agent.tools import ToolResult, build_default_registry
 
 
 class StaticDecisionSource:
@@ -43,6 +46,8 @@ def test_runner_builds_initial_context_for_decision_source():
     assert context.state.goal == "Resolve duplicate charge ticket."
     assert context.step == 0
     assert context.budget_usage.max_steps == 12
+    assert context.bounded_context.task_id == "task_001"
+    assert context.bounded_context.ticket_id == "t_001"
     assert {tool.name for tool in context.available_tools} >= {"fetch_ticket", "request_approval"}
 
 
@@ -144,6 +149,68 @@ def test_scenario_ticket_id_rejects_missing_ticket_id():
         scenario_ticket_id(scenario)
 
 
+def test_bounded_context_payload_contains_decision_inputs_without_raw_db_path():
+    scenario = load_scenario("support_001")
+    observation = successful_observation()
+    request = runner_request()
+    state = AgentState(
+        task_id=request.task.task_id,
+        goal=request.task.goal,
+        scenario_id=request.scenario_id,
+        known_facts={"ticket_id": "t_001"},
+        completed_actions=["fetch_ticket"],
+        pending_approval_ids=["approval_001"],
+        retries_by_failure_type={ErrorType.TIMEOUT: 1},
+        budget_usage=BudgetUsage(
+            steps=1,
+            max_steps=5,
+            estimated_tokens=120,
+            token_budget=500,
+            estimated_cost_usd=0.02,
+            cost_budget_usd=1.0,
+        ),
+    )
+
+    context = build_bounded_context(
+        request=request,
+        state=state,
+        observations=[observation],
+        available_tools=build_default_registry().list_specs(),
+        scenario=scenario,
+    )
+    payload = context.to_decision_payload()
+
+    assert payload["task"] == {
+        "task_id": "task_001",
+        "goal": "Resolve duplicate charge ticket.",
+        "ticket_id": "t_001",
+        "scenario_id": "support_001",
+    }
+    assert payload["state"]["known_facts"] == {"ticket_id": "t_001"}
+    assert payload["state"]["completed_actions"] == ["fetch_ticket"]
+    assert payload["state"]["pending_approval_ids"] == ["approval_001"]
+    assert payload["state"]["retry_counts"] == {"timeout": 1}
+    assert payload["budget"]["steps"] == 1
+    assert payload["budget"]["max_steps"] == 5
+    assert "Use only registered tools supplied in this context." in payload["safety_constraints"]
+    assert "db_path" not in payload
+    assert "fetch_ticket" in {tool["name"] for tool in payload["available_tools"]}
+    fetch_ticket = next(tool for tool in payload["available_tools"] if tool["name"] == "fetch_ticket")
+    assert fetch_ticket["permission_level"] == "read_only"
+    assert fetch_ticket["mutates_state"] is False
+    assert payload["observations"] == [
+        {
+            "tool_name": "fetch_ticket",
+            "summary": "Fetched ticket t_001.",
+            "facts": {"ticket_id": "t_001"},
+            "ok": True,
+            "error_type": None,
+        }
+    ]
+    assert payload["scenario"]["id"] == "support_001"
+    assert payload["scenario"]["initial_state"]["ticket_id"] == "t_001"
+
+
 def runner_request() -> RunnerRequest:
     return RunnerRequest(
         run_id="run_001",
@@ -171,6 +238,21 @@ def resolved_decision() -> ActionDecision:
             "approval_required": False,
         },
         stop_reason="done",
+    )
+
+
+def successful_observation():
+    from bounded_agent.tools import Observation
+
+    return Observation(
+        tool_name="fetch_ticket",
+        tool_result=ToolResult(
+            ok=True,
+            result={"ticket": {"ticket_id": "t_001"}},
+            metadata={"source": "test"},
+        ),
+        summary="Fetched ticket t_001.",
+        facts={"ticket_id": "t_001"},
     )
 
 
