@@ -126,6 +126,124 @@ def test_runner_stops_with_invalid_tool_call_for_failed_action_validation():
     assert result.terminal_result.validation_errors == ["Tool input failed validation.: ticket_id"]
 
 
+def test_runner_executes_tool_call_through_registry_and_records_observation(tmp_path):
+    settings = Settings(_env_file=None, runs_dir=tmp_path / "runs")
+    source = DeterministicDecisionSource(
+        [
+            {
+                "thought_summary": "Inspect the ticket.",
+                "action": {
+                    "type": "tool_call",
+                    "tool_name": "fetch_ticket",
+                    "arguments": {"ticket_id": "t_001"},
+                },
+                "safety_check": {
+                    "permission_level": "read_only",
+                    "approval_required": False,
+                },
+            },
+            resolved_decision_payload(),
+        ]
+    )
+    runner = AgentRunner(
+        source,
+        config=RunnerConfig(trace_path=Path("data/runs/run_001/trace.jsonl")),
+        settings=settings,
+    )
+
+    result = runner.run_scenario("support_001", "run_001")
+
+    assert result.terminal_result.terminal_state is TerminalState.RESOLVED
+    assert result.state.budget_usage.steps == 1
+    assert len(result.observations) == 1
+    observation = result.observations[0]
+    assert observation.tool_name == "fetch_ticket"
+    assert observation.tool_result.ok is True
+    assert observation.tool_result.result["ticket"]["ticket_id"] == "t_001"
+    assert observation.summary == "Executed fetch_ticket."
+    assert observation.facts["ticket"]["ticket_id"] == "t_001"
+
+
+def test_runner_records_structured_tool_error_observation(tmp_path):
+    settings = Settings(_env_file=None, runs_dir=tmp_path / "runs")
+    source = DeterministicDecisionSource(
+        [
+            {
+                "thought_summary": "Fetch a missing order.",
+                "action": {
+                    "type": "tool_call",
+                    "tool_name": "fetch_order",
+                    "arguments": {"order_id": "o_missing"},
+                },
+                "safety_check": {
+                    "permission_level": "read_only",
+                    "approval_required": False,
+                },
+            },
+            blocked_tool_error_decision_payload(),
+        ]
+    )
+    runner = AgentRunner(
+        source,
+        config=RunnerConfig(trace_path=Path("data/runs/run_001/trace.jsonl")),
+        settings=settings,
+    )
+
+    result = runner.run_scenario("support_001", "run_001")
+
+    assert result.terminal_result.terminal_state is TerminalState.BLOCKED_TOOL_ERROR
+    assert len(result.observations) == 1
+    observation = result.observations[0]
+    assert observation.tool_name == "fetch_order"
+    assert observation.tool_result.ok is False
+    assert observation.tool_result.error.type is ErrorType.NOT_FOUND
+    assert observation.summary == "fetch_order failed: Order was not found."
+    assert observation.facts == {
+        "error_type": "not_found",
+        "retryable": False,
+        "details": {"order_id": "o_missing"},
+    }
+
+
+def test_runner_preserves_mutating_tool_idempotency(tmp_path):
+    settings = Settings(_env_file=None, runs_dir=tmp_path / "runs")
+    add_comment_decision = {
+        "thought_summary": "Add the verified duplicate charge note.",
+        "action": {
+            "type": "tool_call",
+            "tool_name": "add_ticket_comment",
+            "arguments": {"ticket_id": "t_001", "body": "Verified duplicate charges."},
+        },
+        "safety_check": {
+            "permission_level": "low_risk_write",
+            "approval_required": False,
+        },
+    }
+    source = DeterministicDecisionSource(
+        [add_comment_decision, add_comment_decision, resolved_decision_payload()]
+    )
+    runner = AgentRunner(
+        source,
+        config=RunnerConfig(trace_path=Path("data/runs/run_001/trace.jsonl")),
+        settings=settings,
+    )
+
+    result = runner.run_scenario("support_001", "run_001")
+
+    assert result.terminal_result.terminal_state is TerminalState.RESOLVED
+    assert result.state.budget_usage.steps == 2
+    assert len(result.observations) == 2
+    assert result.observations[0].tool_result.result == result.observations[1].tool_result.result
+    assert result.observations[1].tool_result.metadata == {"source": "idempotency_replay"}
+
+    connection = connect_database(result.db_path)
+    try:
+        assert connection.execute("SELECT COUNT(*) FROM ticket_comments").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM idempotency_keys").fetchone()[0] == 1
+    finally:
+        connection.close()
+
+
 def test_runner_request_rejects_blank_run_id():
     with pytest.raises(ValueError, match="run_id cannot be blank"):
         RunnerRequest(
@@ -509,6 +627,33 @@ def resolved_decision_payload():
             "approval_required": False,
         },
         "stop_reason": "done",
+    }
+
+
+def blocked_tool_error_decision_payload():
+    return {
+        "thought_summary": "The order lookup failed with a structured not-found error.",
+        "action": {
+            "type": "set_terminal_state",
+            "terminal_state": "blocked_tool_error",
+            "summary": "Order lookup failed.",
+            "fields": {
+                "failed_tool": "fetch_order",
+                "error_type": "not_found",
+                "retry_count": 0,
+                "last_error": {
+                    "type": "not_found",
+                    "message": "Order was not found.",
+                    "retryable": False,
+                    "details": {"order_id": "o_missing"},
+                },
+            },
+        },
+        "safety_check": {
+            "permission_level": "read_only",
+            "approval_required": False,
+        },
+        "stop_reason": "tool_error",
     }
 
 

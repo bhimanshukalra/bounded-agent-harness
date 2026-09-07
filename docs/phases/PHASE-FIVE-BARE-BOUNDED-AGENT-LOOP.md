@@ -87,13 +87,13 @@ Phase Five is complete when:
   - [x] Validate approval request actions
   - [x] Validate terminal-state actions
   - [x] Add action validation tests
-- [ ] Milestone 5.6 - Tool Execution Integration
-  - [ ] Build tool execution context
-  - [ ] Execute tools through registry only
-  - [ ] Record successful tool observations
-  - [ ] Record structured tool errors
-  - [ ] Preserve idempotency behavior for mutating tools
-  - [ ] Add registry-integration tests
+- [x] Milestone 5.6 - Tool Execution Integration
+  - [x] Build tool execution context
+  - [x] Execute tools through registry only
+  - [x] Record successful tool observations
+  - [x] Record structured tool errors
+  - [x] Preserve idempotency behavior for mutating tools
+  - [x] Add registry-integration tests
 - [ ] Milestone 5.7 - State Updates And Trace Writing
   - [ ] Append completed actions
   - [ ] Append tool call history

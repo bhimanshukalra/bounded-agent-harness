@@ -24,10 +24,11 @@ from bounded_agent.loop.actions import (
     TerminalStateAction,
     ToolCallAction,
 )
-from bounded_agent.state import ResetResult, reset_scenario_environment
+from bounded_agent.state import ResetResult, hash_arguments, reset_scenario_environment
 from bounded_agent.tools import (
     Observation,
     ToolCall,
+    ToolExecutionContext,
     ToolRegistry,
     ToolResult,
     ToolSpec,
@@ -219,6 +220,55 @@ class AgentRunner:
             budget_usage=BudgetUsage(max_steps=self.config.max_steps),
         )
         observations: tuple[Observation, ...] = ()
+        db_path = reset_result.db_path if reset_result is not None else None
+
+        while True:
+            context = self._build_runner_context(
+                request=request,
+                state=state,
+                observations=observations,
+                scenario=scenario,
+                db_path=db_path,
+            )
+            decision = self.decision_source.decide(context)
+            validation = validate_action_decision(decision, self.registry)
+
+            if not validation.valid:
+                terminal_result = self._invalid_action_result(request, state, validation)
+                break
+            if isinstance(decision.action, TerminalStateAction):
+                terminal_result = self._terminal_result_from_action(request, state, decision.action)
+                break
+            if isinstance(decision.action, ToolCallAction):
+                if db_path is None:
+                    terminal_result = self._missing_execution_context_result(request, state, decision)
+                    break
+                observation = self._execute_tool_action(request, db_path, decision.action)
+                observations = (*observations, observation)
+                state = increment_step_count(state)
+                continue
+
+            terminal_result = self._unsupported_action_result(request, state, decision)
+            break
+
+        terminal_state = state.model_copy(update={"terminal_state": terminal_result.terminal_state})
+        return RunnerResult(
+            terminal_result=terminal_result,
+            state=terminal_state,
+            observations=observations,
+            scenario=scenario,
+            db_path=db_path,
+        )
+
+    def _build_runner_context(
+        self,
+        *,
+        request: RunnerRequest,
+        state: AgentState,
+        observations: Sequence[Observation],
+        scenario: Scenario | None,
+        db_path: Path | None,
+    ) -> RunnerContext:
         available_tools = tuple(self.registry.list_specs())
         bounded_context = build_bounded_context(
             request=request,
@@ -227,8 +277,7 @@ class AgentRunner:
             available_tools=available_tools,
             scenario=scenario,
         )
-
-        context = RunnerContext(
+        return RunnerContext(
             request=request,
             state=state,
             step=state.budget_usage.steps,
@@ -237,25 +286,32 @@ class AgentRunner:
             budget_usage=state.budget_usage,
             bounded_context=bounded_context,
             scenario=scenario,
-            db_path=reset_result.db_path if reset_result is not None else None,
+            db_path=db_path,
         )
-        decision = self.decision_source.decide(context)
-        validation = validate_action_decision(decision, self.registry)
 
-        if not validation.valid:
-            terminal_result = self._invalid_action_result(request, state, validation)
-        elif isinstance(decision.action, TerminalStateAction):
-            terminal_result = self._terminal_result_from_action(request, state, decision.action)
-        else:
-            terminal_result = self._unsupported_action_result(request, state, decision)
-
-        terminal_state = state.model_copy(update={"terminal_state": terminal_result.terminal_state})
-        return RunnerResult(
-            terminal_result=terminal_result,
-            state=terminal_state,
-            observations=observations,
-            scenario=scenario,
-            db_path=reset_result.db_path if reset_result is not None else None,
+    def _execute_tool_action(
+        self,
+        request: RunnerRequest,
+        db_path: Path,
+        action: ToolCallAction,
+    ) -> Observation:
+        spec = self.registry.get_spec(action.tool_name)
+        idempotency_key = tool_idempotency_key(request.run_id, action) if spec.idempotency_required else None
+        call = ToolCall(
+            tool_name=action.tool_name,
+            arguments=action.arguments,
+            run_id=request.run_id,
+            idempotency_key=idempotency_key,
+        )
+        context = ToolExecutionContext(
+            run_id=request.run_id,
+            db_path=db_path,
+            scenario_id=request.scenario_id,
+            idempotency_key=idempotency_key,
+        )
+        return observation_from_tool_result(
+            action.tool_name,
+            self.registry.execute(call, context),
         )
 
     def _terminal_result_from_action(
@@ -296,6 +352,26 @@ class AgentRunner:
             trace_event_id=f"trace_{uuid4().hex}",
         )
 
+    def _missing_execution_context_result(
+        self,
+        request: RunnerRequest,
+        state: AgentState,
+        decision: ActionDecision,
+    ) -> TerminalResult:
+        return TerminalResult(
+            run_id=request.run_id,
+            scenario_id=request.scenario_id,
+            ticket_id=request.ticket_id,
+            terminal_state=TerminalState.FAILED_UNRECOVERABLE,
+            summary="Tool execution requires a scenario reset database path.",
+            actions_taken=state.completed_actions,
+            budget_usage=state.budget_usage,
+            trace_path=self.config.trace_path,
+            error_summary=f"Missing execution context for action: {decision.action.type}",
+            last_successful_step=state.budget_usage.steps,
+            trace_event_id=f"trace_{uuid4().hex}",
+        )
+
     def _invalid_action_result(
         self,
         request: RunnerRequest,
@@ -322,6 +398,37 @@ def scenario_ticket_id(scenario: Scenario) -> str:
     if not isinstance(ticket_id, str) or not ticket_id.strip():
         raise ValueError(f"scenario does not define initial_state.ticket_id: {scenario.id}")
     return ticket_id
+
+
+def increment_step_count(state: AgentState) -> AgentState:
+    next_budget = state.budget_usage.model_copy(update={"steps": state.budget_usage.steps + 1})
+    return state.model_copy(update={"budget_usage": next_budget})
+
+
+def tool_idempotency_key(run_id: str, action: ToolCallAction) -> str:
+    return f"{run_id}:{action.tool_name}:{hash_arguments(action.arguments)}"
+
+
+def observation_from_tool_result(tool_name: str, result: ToolResult) -> Observation:
+    if result.ok:
+        return Observation(
+            tool_name=tool_name,
+            tool_result=result,
+            summary=f"Executed {tool_name}.",
+            facts=result.result or {},
+        )
+
+    assert result.error is not None
+    return Observation(
+        tool_name=tool_name,
+        tool_result=result,
+        summary=f"{tool_name} failed: {result.error.message}",
+        facts={
+            "error_type": result.error.type.value,
+            "retryable": result.error.retryable,
+            "details": result.error.details,
+        },
+    )
 
 
 def parse_action_decision(raw_decision: ActionDecision | dict[str, Any] | str) -> ActionDecision:
