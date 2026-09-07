@@ -106,14 +106,14 @@ Phase Six is complete when:
   - [x] Confirm trace records MCP-backed lookup behavior
   - [x] Confirm terminal result persists
   - [x] Add scenario test coverage
-- [ ] Milestone 6.9 - Phase Seven Readiness Review
-  - [ ] Confirm server starts locally
-  - [ ] Confirm MCP tools return typed outputs
-  - [ ] Confirm tool-layer wrapper handles errors
-  - [ ] Confirm registry integration works
-  - [ ] Confirm MCP-dependent scenario works
-  - [ ] Confirm tests and lint pass
-  - [ ] Write Phase Six completion note
+- [x] Milestone 6.9 - Phase Seven Readiness Review
+  - [x] Confirm server starts locally
+  - [x] Confirm MCP tools return typed outputs
+  - [x] Confirm tool-layer wrapper handles errors
+  - [x] Confirm registry integration works
+  - [x] Confirm MCP-dependent scenario works
+  - [x] Confirm tests and lint pass
+  - [x] Write Phase Six completion note
 
 ## Milestone 6.1 - MCP Boundary And Scope
 
@@ -331,7 +331,17 @@ Confirm the MCP boundary is stable enough for durable state, memory, and compact
 
 ### Phase Six Completion Note
 
-Write this after implementation is complete.
+Phase Six is complete.
+
+The local MCP boundary lives in `src/bounded_agent/mcp_server/` and includes typed schemas, deterministic policy/knowledge handlers, lifecycle-aware local server dispatch, and structured MCP errors. It exposes `search_knowledge_base` and `get_policy_detail`, serving policy records from the configured fixture through an in-memory SQLite store.
+
+The tool layer uses `McpPolicyClient` and `LocalMcpPolicyClient` to translate MCP success and error responses into the stable `ToolResult` contract. The existing read-only `search_policy` registry tool now uses that wrapper without changing agent-facing schemas or bypassing registry validation.
+
+`support_005` is the MCP-dependent scenario: its deterministic runner path uses `search_policy`, records `local_mcp` / `search_knowledge_base` provenance in the JSONL trace, escalates safely for ambiguous bundle policy, and persists its terminal result.
+
+Verification completed with a standalone local server lifecycle call, `248 passed` tests, and clean Ruff lint.
+
+The local server is deliberately in-process and fixture-backed; network transport, remote service discovery, and MCP-managed persistent memory are deferred. Phase Seven can begin with durable state, memory, and compaction while keeping MCP as the scoped policy/knowledge boundary.
 
 Phase Six completion should record:
 
