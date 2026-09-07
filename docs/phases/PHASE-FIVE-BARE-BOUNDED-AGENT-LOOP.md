@@ -53,13 +53,13 @@ Phase Five is complete when:
 
 ## Phase Five Checklist
 
-- [ ] Milestone 5.1 - Runner Boundary And Control Flow
-  - [ ] Define what `AgentRunner` owns
-  - [ ] Define what remains outside the runner
-  - [ ] Define runner inputs
-  - [ ] Define runner outputs
-  - [ ] Define stop conditions
-  - [ ] Add runner contract tests
+- [x] Milestone 5.1 - Runner Boundary And Control Flow
+  - [x] Define what `AgentRunner` owns
+  - [x] Define what remains outside the runner
+  - [x] Define runner inputs
+  - [x] Define runner outputs
+  - [x] Define stop conditions
+  - [x] Add runner contract tests
 - [ ] Milestone 5.2 - Run State Loading
   - [ ] Load task metadata
   - [ ] Load scenario metadata

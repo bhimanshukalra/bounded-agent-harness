@@ -7,12 +7,26 @@ from bounded_agent.loop.actions import (
     TerminalStateAction,
     ToolCallAction,
 )
+from bounded_agent.loop.runner import (
+    AgentRunner,
+    DecisionSource,
+    RunnerConfig,
+    RunnerContext,
+    RunnerRequest,
+    RunnerResult,
+)
 
 __all__ = [
     "ActionDecision",
+    "AgentRunner",
     "ApprovalRequestAction",
+    "DecisionSource",
     "ReplanAction",
     "RetryAction",
+    "RunnerConfig",
+    "RunnerContext",
+    "RunnerRequest",
+    "RunnerResult",
     "SafetyCheck",
     "TerminalStateAction",
     "ToolCallAction",
