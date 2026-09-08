@@ -38,12 +38,12 @@ def test_validate_scenarios_loads_all_fixtures():
     assert "Validated 10 scenario(s)." in result.output
 
 
-def test_run_eval_placeholder_validates_scenario_directory():
+def test_run_eval_executes_the_default_scenario_set():
     result = CliRunner().invoke(app, ["run-eval"])
 
     assert result.exit_code == 0
-    assert "Validated 10 scenario(s)." in result.output
-    assert "run-eval is not implemented yet" in result.output
+    assert "Evaluation complete: local-eval" in result.output
+    assert "Verified pass rate:" in result.output
 
 
 def test_demo_shows_bounded_workflow():

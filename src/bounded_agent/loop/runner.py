@@ -20,7 +20,7 @@ from bounded_agent.domain import (
     TerminalState,
     TraceEvent,
 )
-from bounded_agent.evals import load_scenario
+from bounded_agent.evals.scenarios import load_scenario
 from bounded_agent.loop.actions import (
     ActionDecision,
     ApprovalRequestAction,

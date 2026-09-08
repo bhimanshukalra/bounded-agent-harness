@@ -5,7 +5,7 @@ from typing import Any
 
 from bounded_agent.config import Settings, load_settings
 from bounded_agent.domain import ApprovalStatus, Scenario
-from bounded_agent.evals import load_scenario
+from bounded_agent.evals.scenarios import load_scenario
 from bounded_agent.state.fixtures import json_dump, seed_base_fixtures
 from bounded_agent.state.schema import connect_database, initialize_schema
 

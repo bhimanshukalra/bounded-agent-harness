@@ -6,9 +6,11 @@ from rich.console import Console
 
 from bounded_agent.config import load_settings
 from bounded_agent.evals import (
+    EvaluationConfig,
     VerificationRequest,
     load_all_scenarios,
     load_scenario,
+    run_evaluation,
     scenario_path,
     verify_run,
 )
@@ -44,11 +46,29 @@ def run_scenario(scenario_id: str) -> None:
 
 
 @app.command("run-eval")
-def run_eval() -> None:
-    """Validate scenario fixtures before the eval runner is implemented."""
-    scenarios = load_all_scenarios()
-    console.print(f"[green]Validated {len(scenarios)} scenario(s).[/green]")
-    console.print("run-eval is not implemented yet")
+def run_eval(
+    scenarios: str = "support_001",
+    runners: str = "agent_loop,fixed_workflow_baseline",
+    eval_run_id: str = "local-eval",
+) -> None:
+    """Run deterministic bounded and baseline evaluation attempts."""
+    selected = [scenario_id.strip() for scenario_id in scenarios.split(",") if scenario_id.strip()]
+    selected_runners = [runner_type.strip() for runner_type in runners.split(",") if runner_type.strip()]
+    try:
+        summary = run_evaluation(
+            EvaluationConfig(
+                eval_run_id=eval_run_id,
+                scenario_ids=selected,
+                runner_types=selected_runners,
+            ),
+            load_settings(),
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(f"[red]Evaluation failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    console.print(f"[green]Evaluation complete:[/green] {summary.eval_run_id}")
+    console.print(f"Verified pass rate: {summary.metrics['verified_pass_rate']:.0%}")
+    console.print(f"Artifacts: {summary.artifact_dir}")
 
 
 @app.command("demo")
