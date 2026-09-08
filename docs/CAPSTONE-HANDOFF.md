@@ -61,6 +61,8 @@ Start with [Local Operations](LOCAL-OPERATIONS.md), then add work at the relevan
 
 Persisted state and tool schema changes need an explicit compatibility decision. Existing run artifacts should either remain readable or be rejected with a clear migration message. Triage failures by preserving the terminal result, relevant trace events, verifier report, fixture/scenario hashes, and command used to reproduce the issue.
 
+Use [Governed Evolution](GOVERNED-EVOLUTION.md) before proposing a new capability or changing a trust boundary. It defines the required proposal, risk record, release evidence, containment plan, and review cadence.
+
 ## Quality Gate
 
 ```bash

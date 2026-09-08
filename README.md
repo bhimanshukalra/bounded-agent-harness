@@ -85,3 +85,4 @@ Agent workflow design, bounded tool use, approval systems, auditability, typed s
 
 See [Local Operations](docs/LOCAL-OPERATIONS.md) for the supported command flow, artifact layout, configuration, and release check.
 See [Capstone And Handoff](docs/CAPSTONE-HANDOFF.md) for the representative evidence set, architecture boundaries, limitations, and contributor guidance.
+See [Governed Evolution](docs/GOVERNED-EVOLUTION.md) for capability proposals, risk assessment, release gates, containment, and lifecycle expectations.
