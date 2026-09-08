@@ -5,7 +5,13 @@ from pydantic import ValidationError
 from rich.console import Console
 
 from bounded_agent.config import load_settings
-from bounded_agent.evals import load_all_scenarios, load_scenario, scenario_path
+from bounded_agent.evals import (
+    VerificationRequest,
+    load_all_scenarios,
+    load_scenario,
+    scenario_path,
+    verify_run,
+)
 
 app = typer.Typer(help="Bounded support-resolution agent harness.")
 console = Console()
@@ -80,6 +86,27 @@ def show_trace(run_id: str) -> None:
 
     console.print(f"[green]Run ID accepted:[/green] {run_id}")
     console.print("show-trace is not implemented yet")
+
+
+@app.command("verify-run")
+def verify_run_command(run_id: str, scenario_id: str | None = None) -> None:
+    """Verify a completed scenario run without mutating its artifacts."""
+    try:
+        result = verify_run(
+            VerificationRequest(run_id=run_id, scenario_id=scenario_id),
+            load_settings(),
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(f"[red]Verification failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    if result.passed:
+        console.print(f"[green]Verification passed:[/green] {result.run_id}")
+        return
+    console.print(f"[red]Verification failed:[/red] {result.run_id}")
+    for failure in result.failures:
+        console.print(f"- {failure}")
+    raise typer.Exit(code=1)
 
 
 @app.command("validate-scenarios")

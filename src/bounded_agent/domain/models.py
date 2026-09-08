@@ -214,6 +214,7 @@ class VerifierResult(StrictBaseModel):
     checks: dict[str, bool] = Field(default_factory=dict)
     failures: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    evidence: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
 class EvalRun(StrictBaseModel):
