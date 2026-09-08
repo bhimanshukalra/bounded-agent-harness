@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import typer
@@ -7,6 +8,7 @@ from rich.console import Console
 from bounded_agent.config import load_settings
 from bounded_agent.evals import (
     EvaluationConfig,
+    FixedWorkflowDecisionSource,
     VerificationRequest,
     load_all_scenarios,
     load_scenario,
@@ -14,6 +16,8 @@ from bounded_agent.evals import (
     scenario_path,
     verify_run,
 )
+from bounded_agent.loop import AgentRunner, RunnerConfig
+from bounded_agent.state import RunStateStore, reset_scenario_environment
 
 app = typer.Typer(help="Bounded support-resolution agent harness.")
 console = Console()
@@ -25,8 +29,8 @@ def main() -> None:
 
 
 @app.command("run-scenario")
-def run_scenario(scenario_id: str) -> None:
-    """Validate a scenario exists before the agent runner is implemented."""
+def run_scenario(scenario_id: str, run_id: str = "local-run") -> None:
+    """Execute one deterministic bounded scenario and persist its artifacts."""
     settings = load_settings()
     path = scenario_path(scenario_id, settings)
 
@@ -41,8 +45,18 @@ def run_scenario(scenario_id: str) -> None:
         console.print(str(exc))
         raise typer.Exit(code=1) from exc
 
-    console.print(f"[green]Scenario validated:[/green] {scenario.id}")
-    console.print("run-scenario is not implemented yet")
+    trace_path = settings.runs_dir / run_id / "trace.jsonl"
+    trace_path.unlink(missing_ok=True)
+    runner = AgentRunner(
+        FixedWorkflowDecisionSource(scenario),
+        config=RunnerConfig(
+            max_steps=scenario.initial_state.get("max_steps", settings.default_max_steps),
+            trace_path=trace_path,
+        ),
+        settings=settings,
+    )
+    result = runner.run_scenario(scenario.id, run_id)
+    render_run_result(result.terminal_result, result.db_path, settings.runs_dir / run_id / "memory")
 
 
 @app.command("run-eval")
@@ -91,21 +105,89 @@ def demo() -> None:
     console.print(f"Trace/report: {trace_path}")
 
 
+@app.command("resume-scenario")
+def resume_scenario(run_id: str) -> None:
+    """Resume a nonterminal deterministic scenario from durable run state."""
+    settings = load_settings()
+    try:
+        persisted = RunStateStore(settings.runs_dir).load(run_id)
+        if persisted.scenario_id is None:
+            raise ValueError("only scenario-backed runs can be resumed")
+        scenario = load_scenario(persisted.scenario_id, settings)
+        runner = AgentRunner(
+            FixedWorkflowDecisionSource(scenario),
+            config=RunnerConfig(trace_path=persisted.trace_path),
+            settings=settings,
+        )
+        result = runner.resume_scenario(run_id)
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(f"[red]Resume failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    render_run_result(result.terminal_result, result.db_path, settings.runs_dir / run_id / "memory")
+
+
 @app.command("reset-env")
-def reset_env() -> None:
-    """Placeholder for deterministic mock environment reset."""
-    console.print("reset-env is not implemented yet")
+def reset_env(scenario_id: str, run_id: str = "local-reset") -> None:
+    """Reset the deterministic mock environment for a scenario run."""
+    try:
+        result = reset_scenario_environment(scenario_id, run_id, load_settings())
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(f"[red]Reset failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    console.print(f"[green]Environment reset:[/green] {result.scenario_id}")
+    console.print(f"Database: {result.db_path}")
 
 
 @app.command("show-trace")
-def show_trace(run_id: str) -> None:
-    """Validate run ID shape before trace viewing is implemented."""
-    if not run_id.strip():
-        console.print("[red]Run ID cannot be blank.[/red]")
-        raise typer.Exit(code=1)
+def show_trace(run_id: str, event_type: str | None = None) -> None:
+    """Print persisted trace events, optionally filtered by event type."""
+    persisted = load_persisted_run(run_id)
+    try:
+        events = [json.loads(line) for line in persisted.trace_path.read_text().splitlines() if line]
+    except FileNotFoundError as exc:
+        console.print(f"[red]Trace unavailable:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    selected = [event for event in events if event_type is None or event["event_type"] == event_type]
+    for event in selected:
+        console.print_json(json.dumps(event, sort_keys=True))
+    console.print(f"Events: {len(selected)}")
 
-    console.print(f"[green]Run ID accepted:[/green] {run_id}")
-    console.print("show-trace is not implemented yet")
+
+@app.command("show-run")
+def show_run(run_id: str) -> None:
+    """Print read-only durable run-state metadata and artifact paths."""
+    persisted = load_persisted_run(run_id)
+    console.print_json(json.dumps(persisted.model_dump(mode="json"), sort_keys=True))
+
+
+@app.command("show-memory")
+def show_memory(run_id: str, artifact: str = "facts") -> None:
+    """Print one read-only durable memory artifact for a run."""
+    allowed = {"facts", "decisions", "open_questions", "safety", "tool_history"}
+    if artifact not in allowed:
+        console.print(f"[red]Unknown memory artifact:[/red] {artifact}")
+        raise typer.Exit(code=1)
+    suffix = "jsonl" if artifact == "tool_history" else "md"
+    path = load_persisted_run(run_id).db_path.parent / "memory" / f"{artifact}.{suffix}"
+    try:
+        console.print(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        console.print(f"[red]Memory artifact unavailable:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+
+@app.command("show-result")
+def show_result(run_id: str) -> None:
+    """Print the persisted terminal result for a run."""
+    path = load_persisted_run(run_id).db_path.parent / "result.json"
+    print_json_artifact(path, "Terminal result")
+
+
+@app.command("show-verification")
+def show_verification(run_id: str) -> None:
+    """Print the persisted independent verifier result for a run."""
+    settings = load_settings()
+    print_json_artifact(settings.eval_runs_dir / run_id / "verification.json", "Verifier result")
 
 
 @app.command("verify-run")
@@ -142,3 +224,27 @@ def validate_scenarios() -> None:
 
     scenarios = load_all_scenarios(settings)
     console.print(f"[green]Validated {len(scenarios)} scenario(s).[/green]")
+
+
+def load_persisted_run(run_id: str):
+    try:
+        return RunStateStore(load_settings().runs_dir).load(run_id)
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(f"[red]Run unavailable:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+
+def print_json_artifact(path: Path, label: str) -> None:
+    try:
+        console.print_json(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        console.print(f"[red]{label} unavailable:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+
+def render_run_result(terminal_result, db_path: Path | None, memory_path: Path) -> None:
+    console.print(f"[green]Run complete:[/green] {terminal_result.run_id}")
+    console.print(f"Terminal state: {terminal_result.terminal_state.value}")
+    console.print(f"Trace: {terminal_result.trace_path}")
+    console.print(f"Result: {db_path.parent / 'result.json' if db_path else 'unavailable'}")
+    console.print(f"Memory: {memory_path}")

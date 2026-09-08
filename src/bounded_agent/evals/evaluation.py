@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +51,7 @@ class EvaluationSummary(BaseModel):
     tag_pass_rates: dict[str, float]
     difficulty_pass_rates: dict[str, float]
     artifact_dir: Path
+    reproducibility: dict[str, Any]
 
 
 def run_evaluation(config: EvaluationConfig, settings: Settings | None = None) -> EvaluationSummary:
@@ -113,6 +115,7 @@ def run_evaluation(config: EvaluationConfig, settings: Settings | None = None) -
         tag_pass_rates=tag_pass_rates(attempts),
         difficulty_pass_rates=difficulty_pass_rates(attempts),
         artifact_dir=artifact_dir,
+        reproducibility=reproducibility_metadata(config, active_settings),
     )
     persist_evaluation(summary)
     return summary
@@ -123,13 +126,12 @@ class FixedWorkflowDecisionSource:
 
     def __init__(self, scenario: Scenario) -> None:
         self.scenario = scenario
-        self.index = 0
         self.registry = build_default_registry()
 
     def decide(self, context) -> ActionDecision:
-        if self.index < len(self.scenario.expected_actions):
-            tool_name = self.scenario.expected_actions[self.index]
-            self.index += 1
+        action_index = len(context.state.completed_actions)
+        if action_index < len(self.scenario.expected_actions):
+            tool_name = self.scenario.expected_actions[action_index]
             if tool_name == "request_approval":
                 arguments = tool_arguments(self.scenario, tool_name, context)
                 return ActionDecision.model_validate(
@@ -254,6 +256,24 @@ def persist_evaluation(summary: EvaluationSummary) -> None:
     jsonl_path.write_text("".join(attempt.model_dump_json() + "\n" for attempt in summary.attempts), encoding="utf-8")
     (summary.artifact_dir / "summary.json").write_text(summary.model_dump_json(indent=2) + "\n", encoding="utf-8")
     (summary.artifact_dir / "report.md").write_text(render_report(summary), encoding="utf-8")
+
+
+def reproducibility_metadata(config: EvaluationConfig, settings: Settings) -> dict[str, Any]:
+    scenario_hashes = {
+        scenario_id: hashlib.sha256(
+            (settings.scenarios_dir / f"{scenario_id}.json").read_bytes()
+        ).hexdigest()
+        for scenario_id in sorted(config.scenario_ids)
+    }
+    fixture_path = settings.fixtures_dir / "support_seed.json"
+    return {
+        "execution_mode": "live_model" if settings.enable_live_model else "deterministic",
+        "model_provider": settings.model_provider,
+        "model_name": settings.model_name,
+        "prompt_version": "not_configured",
+        "fixture_sha256": hashlib.sha256(fixture_path.read_bytes()).hexdigest(),
+        "scenario_sha256": scenario_hashes,
+    }
 
 
 def render_report(summary: EvaluationSummary) -> str:

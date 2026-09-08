@@ -12,7 +12,7 @@ Most agent demos look powerful because the agent can do anything. Production sup
 
 The harness is designed for support-resolution scenarios such as duplicate-charge triage. The agent can inspect scoped account state, read tickets, fetch customer and order facts, search deterministic policy content, check refund eligibility, draft safe responses, add internal ticket comments, and create durable approval requests.
 
-The agent cannot perform unsafe writes without the required approval context. Refunds and ticket status changes are modeled as approval-gated tools, mutating tools require idempotency keys, and every tool call is validated against strict Pydantic schemas. The current runner is intentionally incremental: the repo already contains the tool registry, state model, scenarios, policy checks, failure handling, and CLI entry points, while full planner orchestration is on the roadmap.
+The agent cannot perform unsafe writes without the required approval context. Refunds and ticket status changes are modeled as approval-gated tools, mutating tools require idempotency keys, and every tool call is validated against strict Pydantic schemas. The local runner executes deterministic bounded workflows through the same registry, approval, idempotency, trace, memory, and verifier boundaries used by evaluation. Live-model execution remains intentionally out of scope for the local release workflow.
 
 ## Architecture
 
@@ -20,7 +20,7 @@ The agent cannot perform unsafe writes without the required approval context. Re
 - `src/bounded_agent/state`: SQLite schema, fixture loading, inspection helpers, audit records, idempotency, reset helpers, and injected failure support.
 - `src/bounded_agent/tools`: typed tool schemas, registry metadata, read tools, write tools, approval-gated tools, policy tools, and execution wrappers.
 - `src/bounded_agent/loop`: typed agent action models for tool calls, approval requests, retries, replans, and terminal states.
-- `src/bounded_agent/evals`: scenario loading and validation for deterministic evaluation fixtures.
+- `src/bounded_agent/evals`: scenario loading, independent verification, deterministic evaluation, and reports.
 - `data/fixtures`: mock support and policy data.
 - `data/scenarios`: support-resolution scenario contracts with expected and forbidden actions.
 - `reports`: human-readable traces and experiment outputs.
@@ -34,7 +34,8 @@ Run the 60-second local check:
 uv sync --locked
 uv run pytest
 uv run bounded-agent --help
-uv run bounded-agent demo
+uv run bounded-agent run-scenario support_001 --run-id quickstart-001
+uv run bounded-agent verify-run quickstart-001
 ```
 
 ## Demo scenario
@@ -70,7 +71,7 @@ The mock environment also supports injected failures, allowing retry and failure
 
 Scenarios in `data/scenarios` define the task, initial state, expected terminal state, expected actions, forbidden actions, injected failures, tags, difficulty, and grading rubric. This gives the harness a contract for evaluating whether an agent stayed inside bounds.
 
-Current evaluation coverage validates scenario fixtures, typed tool schemas, state transitions, idempotency behavior, approval gates, and failure handling. The next step is to connect these contracts to a full agent loop runner that emits machine-readable traces and aggregate eval reports.
+`bounded-agent run-eval` executes reproducible deterministic attempts for the bounded workflow and fixed-workflow baseline labels, independently verifies each attempt, and writes JSONL, JSON, and Markdown reports. Use `bounded-agent verify-run <run_id>` to inspect a completed run without mutating it.
 
 ## What this demonstrates
 
@@ -78,9 +79,8 @@ Agent workflow design, bounded tool use, approval systems, auditability, typed s
 
 ## Roadmap
 
-- Implement the full bounded agent loop runner.
-- Emit structured trace artifacts for every run.
-- Add a richer `bounded-agent run-scenario` execution path.
-- Add eval scoring across expected actions, forbidden actions, terminal state, and trace quality.
-- Add examples for approval granted, approval denied, transient tool failure, and idempotency replay.
-- Publish a compact portfolio walkthrough with architecture diagram and demo recording.
+- Add a model-backed decision source behind the existing bounded action contract.
+- Extend the deterministic evaluation corpus and baseline comparisons.
+- Add production deployment and remote-integration controls only with separate security review.
+
+See [Local Operations](docs/LOCAL-OPERATIONS.md) for the supported command flow, artifact layout, configuration, and release check.
