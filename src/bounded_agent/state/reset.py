@@ -7,6 +7,7 @@ from bounded_agent.config import Settings, load_settings
 from bounded_agent.domain import ApprovalStatus, Scenario
 from bounded_agent.evals.scenarios import load_scenario
 from bounded_agent.state.fixtures import json_dump, seed_base_fixtures
+from bounded_agent.state.paths import validate_artifact_id
 from bounded_agent.state.schema import connect_database, initialize_schema
 
 FIXED_RESET_TIMESTAMP = "2026-08-25T00:00:00Z"
@@ -21,7 +22,11 @@ class ResetResult:
 
 def run_database_path(run_id: str, settings: Settings | None = None) -> Path:
     active_settings = settings or load_settings()
-    return active_settings.runs_dir / run_id / "state.db"
+    return (
+        active_settings.runs_dir
+        / validate_artifact_id(run_id, label="run_id")
+        / "state.db"
+    )
 
 
 def reset_scenario_environment(

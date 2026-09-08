@@ -71,7 +71,7 @@ The mock environment also supports injected failures, allowing retry and failure
 
 Scenarios in `data/scenarios` define the task, initial state, expected terminal state, expected actions, forbidden actions, injected failures, tags, difficulty, and grading rubric. This gives the harness a contract for evaluating whether an agent stayed inside bounds.
 
-`bounded-agent run-eval` executes reproducible deterministic attempts for the bounded workflow and fixed-workflow baseline labels, independently verifies each attempt, and writes JSONL, JSON, and Markdown reports. Use `bounded-agent verify-run <run_id>` to inspect a completed run without mutating it.
+`bounded-agent run-eval` executes reproducible deterministic fixed-workflow attempts, independently verifies each attempt, and writes JSONL, JSON, and Markdown reports. Additional runner types are rejected until they have distinct decision-source implementations. Use `bounded-agent verify-run <run_id>` to inspect a completed run; it writes its independent report under `data/eval_runs` without changing the run database or trace.
 
 ## What this demonstrates
 

@@ -5,6 +5,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from bounded_agent.domain import AgentState
+from bounded_agent.state.paths import validate_artifact_id
 
 
 class StrictRunState(BaseModel):
@@ -29,7 +30,7 @@ class RunStateStore:
         self.runs_dir = runs_dir
 
     def path_for(self, run_id: str) -> Path:
-        return self.runs_dir / run_id / "state.json"
+        return self.runs_dir / validate_artifact_id(run_id, label="run_id") / "state.json"
 
     def save(self, state: PersistedRunState) -> Path:
         path = self.path_for(state.run_id)

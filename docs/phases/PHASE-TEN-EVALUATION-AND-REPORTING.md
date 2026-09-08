@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Phase Ten turns independently verified scenario runs into repeatable evaluation evidence. It compares the bounded agent against a chosen baseline, aggregates outcomes by scenario and risk category, and produces inspectable reports.
+Phase Ten turns independently verified scenario runs into repeatable evaluation evidence, aggregates outcomes by scenario and risk category, and produces inspectable reports. A runner comparison is admitted only when each label has a distinct implemented decision source.
 
-The goal is to demonstrate whether the bounded loop improves useful outcomes while preserving safety, rather than presenting isolated successful runs.
+The goal is to make supported behavior measurable while preserving safety, rather than presenting isolated successful runs or unsupported comparisons.
 
 ## Phase Entry Context
 
@@ -16,7 +16,7 @@ Phase Ten is complete when:
 
 - an evaluation run executes a selected scenario set repeatably
 - each attempt is independently verified
-- a fixed-workflow baseline is available for comparison
+- any comparison uses distinct implemented decision sources
 - results are persisted as JSONL plus a concise summary report
 - metrics are broken down by terminal state and scenario tag
 - safety, approval, retry, and MCP-dependent outcomes are visible
@@ -39,7 +39,7 @@ Phase Ten is complete when:
   - [x] Verify baseline results independently
   - [x] Add baseline tests
 - [x] Milestone 10.3 - Evaluation Orchestrator
-  - [x] Run bounded-agent and baseline attempts per scenario
+  - [x] Run supported decision-source attempts per scenario
   - [x] Reset scenario state deterministically for each attempt
   - [x] Invoke the independent verifier
   - [x] Continue after individual scenario failures
@@ -54,7 +54,7 @@ Phase Ten is complete when:
 - [x] Milestone 10.5 - Reporting
   - [x] Produce Markdown and JSON summaries
   - [x] Link failures to run, trace, and verifier artifacts
-  - [x] Compare bounded-agent and baseline outcomes
+  - [x] Reject unsupported comparison labels
   - [x] Highlight regressions and safety failures
   - [x] Add report tests
 - [x] Milestone 10.6 - Evaluation CLI
@@ -78,4 +78,4 @@ Phase Ten is complete when:
 
 ## Phase Ten Completion Note
 
-Implemented with reproducible scenario ordering, deterministic fixed-workflow attempts for the bounded-loop and baseline comparison labels, independent verification, JSONL attempt records, JSON/Markdown summaries, terminal/tag/difficulty breakdowns, and the `run-eval` CLI command. The current deterministic comparison is intended as an auditable harness baseline; model-backed policy quality remains outside this phase. The full suite and Ruff passed on 2026-09-08.
+Implemented with reproducible scenario ordering, deterministic fixed-workflow attempts, independent verification, JSONL attempt records, JSON/Markdown summaries, terminal/tag/difficulty breakdowns, and the `run-eval` CLI command. Unsupported comparison labels now fail closed until they have distinct decision-source implementations; model-backed policy quality remains outside this phase. The full suite and Ruff passed on 2026-09-08.

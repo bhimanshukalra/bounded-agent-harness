@@ -2,13 +2,14 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from bounded_agent.config import Settings, load_settings
 from bounded_agent.domain import PermissionLevel, RunnerType, Scenario, TerminalState
 from bounded_agent.evals.scenarios import load_scenario
 from bounded_agent.evals.verifier import VerificationRequest, verify_run
 from bounded_agent.loop import ActionDecision, AgentRunner, RunnerConfig
+from bounded_agent.state import validate_artifact_id
 from bounded_agent.tools import build_default_registry
 
 
@@ -18,9 +19,23 @@ class EvaluationConfig(BaseModel):
     eval_run_id: str = Field(min_length=1)
     scenario_ids: list[str] = Field(min_length=1)
     runner_types: list[RunnerType] = Field(
-        default_factory=lambda: [RunnerType.AGENT_LOOP, RunnerType.FIXED_WORKFLOW_BASELINE]
+        default_factory=lambda: [RunnerType.FIXED_WORKFLOW_BASELINE]
     )
     max_steps: int = Field(default=12, ge=1)
+
+    @model_validator(mode="after")
+    def requires_implemented_runner_types(self) -> "EvaluationConfig":
+        unsupported = [
+            runner_type.value
+            for runner_type in self.runner_types
+            if runner_type is not RunnerType.FIXED_WORKFLOW_BASELINE
+        ]
+        if unsupported:
+            raise ValueError(
+                "local evaluation does not implement decision sources for: "
+                + ", ".join(unsupported)
+            )
+        return self
 
 
 class EvaluationAttempt(BaseModel):
@@ -56,7 +71,8 @@ class EvaluationSummary(BaseModel):
 
 def run_evaluation(config: EvaluationConfig, settings: Settings | None = None) -> EvaluationSummary:
     active_settings = settings or load_settings()
-    artifact_dir = active_settings.eval_runs_dir / config.eval_run_id
+    eval_run_id = validate_artifact_id(config.eval_run_id, label="eval_run_id")
+    artifact_dir = active_settings.eval_runs_dir / eval_run_id
     attempts: list[EvaluationAttempt] = []
     for runner_type in config.runner_types:
         for scenario_id in sorted(config.scenario_ids):
@@ -267,7 +283,8 @@ def reproducibility_metadata(config: EvaluationConfig, settings: Settings) -> di
     }
     fixture_path = settings.fixtures_dir / "support_seed.json"
     return {
-        "execution_mode": "live_model" if settings.enable_live_model else "deterministic",
+        "execution_mode": "deterministic",
+        "requested_live_model": settings.enable_live_model,
         "model_provider": settings.model_provider,
         "model_name": settings.model_name,
         "prompt_version": "not_configured",

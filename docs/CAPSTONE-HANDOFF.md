@@ -7,12 +7,12 @@ Run the representative evidence set from a clean checkout:
 ```bash
 uv sync --locked
 uv run python scripts/run_capstone.py --eval-run-id capstone-demo
-uv run bounded-agent show-verification capstone-demo-agent_loop-support_008
-uv run bounded-agent show-trace capstone-demo-agent_loop-support_008 --event-type safety_event
-uv run bounded-agent show-result capstone-demo-agent_loop-support_005
+uv run bounded-agent show-verification capstone-demo-fixed_workflow_baseline-support_008
+uv run bounded-agent show-trace capstone-demo-fixed_workflow_baseline-support_008 --event-type safety_event
+uv run bounded-agent show-result capstone-demo-fixed_workflow_baseline-support_005
 ```
 
-The capstone evaluates four deterministic scenarios for both bounded-loop and fixed-workflow comparison labels:
+The capstone evaluates four deterministic scenarios using the implemented fixed-workflow decision source:
 
 - `support_002`: policy denial with a safe resolved response.
 - `support_005`: MCP-backed ambiguity leading to escalation.
@@ -44,7 +44,7 @@ Local run and evaluation artifacts are intentionally ignored by Git because they
 ## Limitations And Risks
 
 - The decision source used for the local capstone is deterministic; model quality and prompt behavior are not measured.
-- The fixed-workflow baseline shares the same mock environment and bounded tool surface. It is an auditable harness comparison, not a claim about production performance.
+- The local evaluation currently exercises only the implemented fixed-workflow decision source. Agent-loop and model-backed comparisons remain unavailable until they have distinct implementations and release evidence.
 - MCP is in-process local transport only. There is no remote transport, identity, tenancy, or network hardening.
 - The environment is a mock SQLite support system. No production accounts, payments, or operator tools are connected.
 - Human approval remains authoritative. Durable approval matching protects mock consequential actions but is not an organizational approval workflow.

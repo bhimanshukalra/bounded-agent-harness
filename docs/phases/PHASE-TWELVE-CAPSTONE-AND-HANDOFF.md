@@ -33,7 +33,7 @@ Phase Twelve is complete when:
 - [x] Milestone 12.2 - Evidence Bundle
   - [x] Summarize traces, memory, terminal results, verifier results, and eval reports
   - [x] Link artifacts to scenario IDs and run IDs
-  - [x] Include baseline comparison evidence
+  - [x] Document the unavailable baseline comparison
   - [x] Include safety and failure evidence
   - [x] Define artifact retention rules
 - [x] Milestone 12.3 - Architecture Narrative

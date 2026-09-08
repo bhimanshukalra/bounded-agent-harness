@@ -870,6 +870,29 @@ def test_model_backed_decision_source_passes_bounded_payload_to_client():
     assert client.seen_payloads == [context.bounded_context.to_decision_payload()]
 
 
+def test_runner_rejects_model_backed_source_when_live_model_is_disabled(tmp_path):
+    source = ModelBackedDecisionSource(RecordingModelDecisionClient(resolved_decision_payload()))
+
+    with pytest.raises(ValueError, match="enable_live_model"):
+        AgentRunner(
+            source,
+            config=runner_config(tmp_path),
+            settings=Settings(_env_file=None, enable_live_model=False),
+        )
+
+
+def test_runner_allows_model_backed_source_when_live_model_is_enabled(tmp_path):
+    source = ModelBackedDecisionSource(RecordingModelDecisionClient(resolved_decision_payload()))
+
+    runner = AgentRunner(
+        source,
+        config=runner_config(tmp_path),
+        settings=Settings(_env_file=None, enable_live_model=True),
+    )
+
+    assert runner.decision_source is source
+
+
 def test_validate_action_decision_accepts_valid_tool_call():
     decision = ActionDecision(
         thought_summary="Fetch the ticket.",

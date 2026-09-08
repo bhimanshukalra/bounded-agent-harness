@@ -214,6 +214,8 @@ class AgentRunner:
         self.registry = registry or build_default_registry()
         self.config = config or RunnerConfig()
         self.settings = settings or load_settings()
+        if isinstance(self.decision_source, ModelBackedDecisionSource) and not self.settings.enable_live_model:
+            raise ValueError("model-backed decision sources require enable_live_model=True")
 
     def run_scenario(self, scenario_id: str, run_id: str) -> RunnerResult:
         scenario = load_scenario(scenario_id, self.settings)

@@ -38,6 +38,7 @@ from bounded_agent.state.inspection import (
     snapshot_environment,
 )
 from bounded_agent.state.memory import RunMemory
+from bounded_agent.state.paths import validate_artifact_id
 from bounded_agent.state.reset import (
     ResetResult,
     configure_injected_failures,
@@ -92,5 +93,6 @@ __all__ = [
     "seed_support_fixture",
     "snapshot_environment",
     "update_ticket_status",
+    "validate_artifact_id",
     "write_audit_event",
 ]

@@ -36,6 +36,17 @@ def test_run_scenario_fails_for_missing_scenario():
     assert "Scenario not found: missing" in result.output
 
 
+def test_run_scenario_rejects_path_like_run_id(tmp_path, monkeypatch):
+    settings = Settings(_env_file=None, runs_dir=tmp_path / "runs", eval_runs_dir=tmp_path / "evals")
+    monkeypatch.setattr("bounded_agent.cli.load_settings", lambda: settings)
+
+    result = CliRunner().invoke(app, ["run-scenario", "support_001", "--run-id", "../escape"])
+
+    assert result.exit_code == 1
+    assert "Invalid run ID" in result.output
+    assert not (tmp_path / "escape").exists()
+
+
 def test_validate_scenarios_loads_all_fixtures():
     result = CliRunner().invoke(app, ["validate-scenarios"])
 

@@ -3,7 +3,7 @@ import json
 import pytest
 
 from bounded_agent.domain import AgentState
-from bounded_agent.state import PersistedRunState, RunMemory, RunStateStore
+from bounded_agent.state import PersistedRunState, RunMemory, RunStateStore, validate_artifact_id
 from bounded_agent.tools import Observation, ToolResult
 
 
@@ -39,6 +39,12 @@ def test_run_state_store_rejects_missing_or_mismatched_records(tmp_path):
     path.write_text(json.dumps({"run_id": "run_other"}), encoding="utf-8")
     with pytest.raises(ValueError):
         store.load("run_001")
+
+
+@pytest.mark.parametrize("value", ["../escape", "nested/run", ".", "..", "run id"])
+def test_artifact_ids_reject_path_like_values(value):
+    with pytest.raises(ValueError, match="must contain only"):
+        validate_artifact_id(value, label="run_id")
 
 
 def test_run_memory_writes_scoped_artifacts_and_exact_tool_history(tmp_path):

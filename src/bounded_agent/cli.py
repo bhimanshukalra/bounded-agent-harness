@@ -17,7 +17,7 @@ from bounded_agent.evals import (
     verify_run,
 )
 from bounded_agent.loop import AgentRunner, RunnerConfig
-from bounded_agent.state import RunStateStore, reset_scenario_environment
+from bounded_agent.state import RunStateStore, reset_scenario_environment, validate_artifact_id
 
 app = typer.Typer(help="Bounded support-resolution agent harness.")
 console = Console()
@@ -45,7 +45,12 @@ def run_scenario(scenario_id: str, run_id: str = "local-run") -> None:
         console.print(str(exc))
         raise typer.Exit(code=1) from exc
 
-    trace_path = settings.runs_dir / run_id / "trace.jsonl"
+    try:
+        safe_run_id = validate_artifact_id(run_id, label="run_id")
+    except ValueError as exc:
+        console.print(f"[red]Invalid run ID:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    trace_path = settings.runs_dir / safe_run_id / "trace.jsonl"
     trace_path.unlink(missing_ok=True)
     runner = AgentRunner(
         FixedWorkflowDecisionSource(scenario),
@@ -55,17 +60,17 @@ def run_scenario(scenario_id: str, run_id: str = "local-run") -> None:
         ),
         settings=settings,
     )
-    result = runner.run_scenario(scenario.id, run_id)
-    render_run_result(result.terminal_result, result.db_path, settings.runs_dir / run_id / "memory")
+    result = runner.run_scenario(scenario.id, safe_run_id)
+    render_run_result(result.terminal_result, result.db_path, settings.runs_dir / safe_run_id / "memory")
 
 
 @app.command("run-eval")
 def run_eval(
     scenarios: str = "support_001",
-    runners: str = "agent_loop,fixed_workflow_baseline",
+    runners: str = "fixed_workflow_baseline",
     eval_run_id: str = "local-eval",
 ) -> None:
-    """Run deterministic bounded and baseline evaluation attempts."""
+    """Run deterministic fixed-workflow evaluation attempts."""
     selected = [scenario_id.strip() for scenario_id in scenarios.split(",") if scenario_id.strip()]
     selected_runners = [runner_type.strip() for runner_type in runners.split(",") if runner_type.strip()]
     try:
@@ -192,7 +197,7 @@ def show_verification(run_id: str) -> None:
 
 @app.command("verify-run")
 def verify_run_command(run_id: str, scenario_id: str | None = None) -> None:
-    """Verify a completed scenario run without mutating its artifacts."""
+    """Verify a completed run and persist a report outside its run artifacts."""
     try:
         result = verify_run(
             VerificationRequest(run_id=run_id, scenario_id=scenario_id),
