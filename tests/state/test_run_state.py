@@ -48,6 +48,7 @@ def test_run_memory_writes_scoped_artifacts_and_exact_tool_history(tmp_path):
         goal="Resolve the ticket.",
         known_facts={"search_policy": {"policies": ["policy_001"]}},
         completed_actions=["search_policy"],
+        safety_events=[{"event": "untrusted_instruction_marker", "action": "treat_as_data"}],
     )
     observation = Observation(
         tool_name="search_policy",
@@ -62,3 +63,4 @@ def test_run_memory_writes_scoped_artifacts_and_exact_tool_history(tmp_path):
     assert "`search_policy`" in memory.decisions_path.read_text()
     assert memory.open_questions_path.read_text().endswith("No open questions.\n")
     assert json.loads(memory.tool_history_path.read_text())["tool_name"] == "search_policy"
+    assert "untrusted_instruction_marker" in memory.safety_path.read_text()

@@ -11,6 +11,8 @@ from bounded_agent.config import Settings, load_settings
 from bounded_agent.domain import (
     AgentState,
     BudgetUsage,
+    ErrorType,
+    PermissionLevel,
     RunError,
     Scenario,
     Task,
@@ -106,6 +108,7 @@ class RunnerConfig:
     trace_path: Path = Path("data/runs/trace.jsonl")
     result_path: Path | None = None
     max_context_observations: int = 5
+    max_invalid_actions: int = 0
 
     def __post_init__(self) -> None:
         if self.max_steps < 1:
@@ -114,6 +117,8 @@ class RunnerConfig:
             raise ValueError("max_retries_per_error_type cannot be negative")
         if self.max_context_observations < 1:
             raise ValueError("max_context_observations must be at least 1")
+        if self.max_invalid_actions < 0:
+            raise ValueError("max_invalid_actions cannot be negative")
 
 
 @dataclass(frozen=True)
@@ -308,8 +313,38 @@ class AgentRunner:
                 ),
             )
             validation = validate_action_decision(decision, self.registry)
+            if isinstance(decision.action, TerminalStateAction):
+                validation = validate_terminal_action_against_state(decision.action, state, validation)
+            if isinstance(decision.action, ToolCallAction) and self._is_forbidden_tool(decision.action):
+                state = record_safety_event(
+                    state,
+                    {"event": "forbidden_tool", "tool_name": decision.action.tool_name},
+                )
+                terminal_result = self._policy_violation_result(request, state, decision.action)
+                break
 
             if not validation.valid:
+                state = update_state_after_invalid_action(state, validation)
+                safety_payload = {
+                    "event": "invalid_action",
+                    "tool_name": validation.tool_name,
+                    "errors": list(validation.errors),
+                    "invalid_action_count": state.invalid_action_count,
+                }
+                state = record_safety_event(state, safety_payload)
+                write_trace_event(
+                    self.config.trace_path,
+                    TraceEvent(
+                        run_id=request.run_id,
+                        scenario_id=request.scenario_id,
+                        step=state.budget_usage.steps,
+                        event_type="safety_event",
+                        payload=safety_payload,
+                    ),
+                )
+                self._persist_run_progress(state_store, memory, request, db_path, state, observations)
+                if state.invalid_action_count <= self.config.max_invalid_actions:
+                    continue
                 terminal_result = self._invalid_action_result(request, state, validation)
                 break
             if isinstance(decision.action, TerminalStateAction):
@@ -348,10 +383,60 @@ class AgentRunner:
                         error=run_error_from_tool_result(observation.tool_result),
                     ),
                 )
+                for marker in untrusted_content_markers(observation):
+                    safety_payload = {
+                        "event": "untrusted_instruction_marker",
+                        "tool_name": observation.tool_name,
+                        "marker": marker,
+                        "action": "treat_as_data",
+                    }
+                    state = record_safety_event(state, safety_payload)
+                    write_trace_event(
+                        self.config.trace_path,
+                        TraceEvent(
+                            run_id=request.run_id,
+                            scenario_id=request.scenario_id,
+                            step=state.budget_usage.steps,
+                            event_type="safety_event",
+                            payload=safety_payload,
+                        ),
+                    )
+                if observation.tool_result.error is not None and observation.tool_result.error.type in {
+                    ErrorType.PERMISSION_DENIED,
+                    ErrorType.POLICY_VIOLATION,
+                }:
+                    safety_payload = {
+                        "event": observation.tool_result.error.type.value,
+                        "tool_name": observation.tool_name,
+                        "details": observation.tool_result.error.details,
+                    }
+                    state = record_safety_event(state, safety_payload)
+                    write_trace_event(
+                        self.config.trace_path,
+                        TraceEvent(
+                            run_id=request.run_id,
+                            scenario_id=request.scenario_id,
+                            step=state.budget_usage.steps,
+                            event_type="safety_event",
+                            payload=safety_payload,
+                        ),
+                    )
                 self._persist_run_progress(state_store, memory, request, db_path, state, observations)
+                if (
+                    observation.tool_result.error is not None
+                    and observation.tool_result.error.type is ErrorType.POLICY_VIOLATION
+                ):
+                    terminal_result = self._policy_violation_result(request, state, decision.action)
+                    break
                 continue
             if isinstance(decision.action, ApprovalRequestAction):
-                state = update_state_after_approval_request(state, request.run_id, decision.action)
+                if db_path is None:
+                    terminal_result = self._missing_execution_context_result(request, state, decision)
+                    break
+                observation = self._execute_approval_request(request, db_path, decision.action)
+                observations = (*observations, observation)
+                state = update_state_after_approval_request(state, decision.action, observation)
+                approval_id = approval_id_from_observation(observation)
                 write_trace_event(
                     self.config.trace_path,
                     TraceEvent(
@@ -360,10 +445,22 @@ class AgentRunner:
                         step=state.budget_usage.steps,
                         event_type="approval_request",
                         payload={
-                            "approval_id": state.pending_approval_ids[-1],
+                            "approval_id": approval_id,
                             "action_type": decision.action.action_type,
                             "target": decision.action.target,
+                            "ok": observation.tool_result.ok,
                         },
+                    ),
+                )
+                write_trace_event(
+                    self.config.trace_path,
+                    TraceEvent(
+                        run_id=request.run_id,
+                        scenario_id=request.scenario_id,
+                        step=state.budget_usage.steps,
+                        event_type="observation",
+                        payload=observation_payload(observation),
+                        error=run_error_from_tool_result(observation.tool_result),
                     ),
                 )
                 self._persist_run_progress(state_store, memory, request, db_path, state, observations)
@@ -381,6 +478,24 @@ class AgentRunner:
                             "failed_tool": decision.action.failed_tool,
                             "error_type": decision.action.error_type.value,
                             "retry_reason": decision.action.retry_reason,
+                        },
+                    ),
+                )
+                self._persist_run_progress(state_store, memory, request, db_path, state, observations)
+                continue
+
+            if isinstance(decision.action, ReplanAction):
+                state = update_state_after_replan(state, decision.action)
+                write_trace_event(
+                    self.config.trace_path,
+                    TraceEvent(
+                        run_id=request.run_id,
+                        scenario_id=request.scenario_id,
+                        step=state.budget_usage.steps,
+                        event_type="replan",
+                        payload={
+                            "reason": decision.action.reason,
+                            "next_goal": decision.action.next_goal,
                         },
                     ),
                 )
@@ -500,11 +615,40 @@ class AgentRunner:
             run_id=request.run_id,
             db_path=db_path,
             scenario_id=request.scenario_id,
+            approval_id=action.approval_id,
             idempotency_key=idempotency_key,
         )
         return observation_from_tool_result(
             action.tool_name,
             self.registry.execute(call, context),
+        )
+
+    def _is_forbidden_tool(self, action: ToolCallAction) -> bool:
+        try:
+            return self.registry.get_spec(action.tool_name).permission_level is PermissionLevel.FORBIDDEN
+        except KeyError:
+            return False
+
+    def _execute_approval_request(
+        self,
+        request: RunnerRequest,
+        db_path: Path,
+        action: ApprovalRequestAction,
+    ) -> Observation:
+        return self._execute_tool_action(
+            request,
+            db_path,
+            ToolCallAction(
+                tool_name="request_approval",
+                arguments={
+                    "ticket_id": request.ticket_id,
+                    "action_type": action.action_type,
+                    "target": action.target,
+                    "proposed_arguments": action.proposed_arguments,
+                    "evidence_summary": action.evidence_summary,
+                    "risk_summary": action.risk_summary,
+                },
+            ),
         )
 
     def _terminal_result_from_action(
@@ -583,6 +727,27 @@ class AgentRunner:
             tool_name=validation.tool_name,
             validation_errors=list(validation.errors),
             retry_count=0,
+        )
+
+    def _policy_violation_result(
+        self,
+        request: RunnerRequest,
+        state: AgentState,
+        action: ToolCallAction,
+    ) -> TerminalResult:
+        return TerminalResult(
+            run_id=request.run_id,
+            scenario_id=request.scenario_id,
+            ticket_id=request.ticket_id,
+            terminal_state=TerminalState.FAILED_POLICY_VIOLATION,
+            summary="Tool execution reported a policy violation.",
+            actions_taken=state.completed_actions,
+            budget_usage=state.budget_usage,
+            trace_path=self.config.trace_path,
+            violation_type="tool_policy_violation",
+            attempted_action=action.tool_name,
+            policy_reference="tool_execution",
+            trace_event_id=f"trace_{uuid4().hex}",
         )
 
     def _budget_terminal_result(
@@ -687,7 +852,7 @@ def update_state_after_tool_action(
     known_facts = dict(updated_state.known_facts)
     if observation.tool_result.ok:
         known_facts[action.tool_name] = observation.facts
-    if observation.tool_result.error is not None:
+    if observation.tool_result.error is not None and observation.tool_result.error.retryable:
         error_type = observation.tool_result.error.type
         retries_by_failure_type[error_type] = retries_by_failure_type.get(error_type, 0) + 1
 
@@ -702,20 +867,53 @@ def update_state_after_tool_action(
     )
 
 
-def update_state_after_approval_request(
+def update_state_after_invalid_action(
     state: AgentState,
-    run_id: str,
-    action: ApprovalRequestAction,
+    validation: ActionValidationResult,
 ) -> AgentState:
     updated_state = increment_step_count(state)
-    approval_id = f"{run_id}:approval:{action.action_type}:{len(state.pending_approval_ids) + 1}"
+    return updated_state.model_copy(
+        update={
+            "current_status": f"invalid_action:{validation.tool_name}",
+            "invalid_action_count": updated_state.invalid_action_count + 1,
+        }
+    )
+
+
+def record_safety_event(state: AgentState, event: dict[str, Any]) -> AgentState:
+    return state.model_copy(update={"safety_events": [*state.safety_events, event]})
+
+
+def update_state_after_approval_request(
+    state: AgentState,
+    action: ApprovalRequestAction,
+    observation: Observation,
+) -> AgentState:
+    request_action = ToolCallAction(
+        tool_name="request_approval",
+        arguments={
+            "action_type": action.action_type,
+            "target": action.target,
+            "proposed_arguments": action.proposed_arguments,
+        },
+    )
+    updated_state = update_state_after_tool_action(state, request_action, observation)
+    approval_id = approval_id_from_observation(observation)
+    if approval_id is None:
+        return updated_state
     return updated_state.model_copy(
         update={
             "current_status": "approval_requested",
-            "completed_actions": [*updated_state.completed_actions, "request_approval"],
             "pending_approval_ids": [*updated_state.pending_approval_ids, approval_id],
         }
     )
+
+
+def approval_id_from_observation(observation: Observation) -> str | None:
+    if not observation.tool_result.ok:
+        return None
+    approval_id = observation.facts.get("approval_id")
+    return approval_id if isinstance(approval_id, str) else None
 
 
 def update_state_after_retry(state: AgentState, action: RetryAction) -> AgentState:
@@ -727,6 +925,26 @@ def update_state_after_retry(state: AgentState, action: RetryAction) -> AgentSta
             "current_status": f"retrying:{action.failed_tool}",
             "completed_actions": [*updated_state.completed_actions, "retry"],
             "retries_by_failure_type": retries_by_failure_type,
+            "known_facts": {
+                **updated_state.known_facts,
+                "retry": {
+                    "failed_tool": action.failed_tool,
+                    "error_type": action.error_type.value,
+                    "corrected_arguments": action.corrected_arguments,
+                    "retry_reason": action.retry_reason,
+                },
+            },
+        }
+    )
+
+
+def update_state_after_replan(state: AgentState, action: ReplanAction) -> AgentState:
+    updated_state = increment_step_count(state)
+    return updated_state.model_copy(
+        update={
+            "current_status": f"replanning:{action.next_goal}",
+            "known_facts": {**updated_state.known_facts, **action.known_facts},
+            "completed_actions": [*updated_state.completed_actions, "replan"],
         }
     )
 
@@ -823,9 +1041,19 @@ def validate_action_decision(
 ) -> ActionValidationResult:
     action = decision.action
     if isinstance(action, ToolCallAction):
-        return validate_tool_call_action(action, registry)
+        return validate_action_safety(
+            decision,
+            registry,
+            action.tool_name,
+            validate_tool_call_action(action, registry),
+        )
     if isinstance(action, ApprovalRequestAction):
-        return validate_approval_request_action(action, registry)
+        return validate_action_safety(
+            decision,
+            registry,
+            action.action_type,
+            validate_approval_request_action(action, registry),
+        )
     if isinstance(action, TerminalStateAction):
         return validate_terminal_state_action(action)
     if isinstance(action, RetryAction):
@@ -838,6 +1066,29 @@ def validate_action_decision(
         tool_name="unknown",
         errors=(f"unsupported action type: {action.type}",),
     )
+
+
+def validate_action_safety(
+    decision: ActionDecision,
+    registry: ToolRegistry,
+    tool_name: str,
+    validation: ActionValidationResult,
+) -> ActionValidationResult:
+    if not validation.valid:
+        return validation
+    spec = registry.get_spec(tool_name)
+    declared = decision.safety_check
+    errors: list[str] = []
+    if declared.permission_level is not spec.permission_level:
+        errors.append(
+            f"declared permission {declared.permission_level.value} does not match "
+            f"registered permission {spec.permission_level.value}"
+        )
+    if declared.approval_required is not spec.approval_required:
+        errors.append("declared approval requirement does not match registered tool")
+    if errors:
+        return ActionValidationResult(valid=False, tool_name=tool_name, errors=tuple(errors))
+    return validation
 
 
 def validate_tool_call_action(
@@ -898,10 +1149,33 @@ def validate_terminal_state_action(action: TerminalStateAction) -> ActionValidat
     return ActionValidationResult(valid=True, tool_name="set_terminal_state")
 
 
+def validate_terminal_action_against_state(
+    action: TerminalStateAction,
+    state: AgentState,
+    validation: ActionValidationResult,
+) -> ActionValidationResult:
+    if not validation.valid or action.terminal_state is not TerminalState.NEEDS_HUMAN_APPROVAL:
+        return validation
+    approval_id = action.fields.get("approval_request_id")
+    if approval_id not in state.pending_approval_ids:
+        return ActionValidationResult(
+            valid=False,
+            tool_name="set_terminal_state",
+            errors=("approval_request_id does not reference a pending durable approval",),
+        )
+    return validation
+
+
 def validate_retry_action(
     action: RetryAction,
     registry: ToolRegistry,
 ) -> ActionValidationResult:
+    if action.error_type not in {ErrorType.TIMEOUT, ErrorType.TRANSIENT_ERROR}:
+        return ActionValidationResult(
+            valid=False,
+            tool_name=action.failed_tool,
+            errors=(f"error type is not retryable: {action.error_type.value}",),
+        )
     try:
         registry.get_spec(action.failed_tool)
     except KeyError:
@@ -996,12 +1270,44 @@ def observation_payload(observation: Observation) -> dict[str, Any]:
     return {
         "tool_name": observation.tool_name,
         "summary": observation.summary,
-        "facts": observation.facts,
+        "content_trust": "untrusted_data",
+        "facts": safe_context_facts(observation.facts),
         "ok": observation.tool_result.ok,
         "error_type": observation.tool_result.error.type.value
         if observation.tool_result.error is not None
         else None,
     }
+
+
+UNTRUSTED_INSTRUCTION_MARKERS = (
+    "ignore all previous",
+    "ignore previous",
+    "disregard previous",
+    "system prompt",
+    "reveal",
+    "tool call",
+)
+
+
+def untrusted_content_markers(observation: Observation) -> list[str]:
+    ticket = observation.facts.get("ticket")
+    if not isinstance(ticket, dict) or not ticket.get("untrusted_content"):
+        return []
+    body = ticket.get("body")
+    if not isinstance(body, str):
+        return []
+    normalized_body = body.lower()
+    return [marker for marker in UNTRUSTED_INSTRUCTION_MARKERS if marker in normalized_body]
+
+
+def safe_context_facts(facts: dict[str, Any]) -> dict[str, Any]:
+    ticket = facts.get("ticket")
+    if not isinstance(ticket, dict) or not ticket.get("untrusted_content"):
+        return facts
+    sanitized_ticket = dict(ticket)
+    if "body" in sanitized_ticket:
+        sanitized_ticket["body"] = "[untrusted content omitted; see tool history]"
+    return {**facts, "ticket": sanitized_ticket}
 
 
 def scenario_payload(scenario: Scenario) -> dict[str, Any]:

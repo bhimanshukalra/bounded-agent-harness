@@ -19,6 +19,7 @@ class ToolCallAction(StrictBaseModel):
     type: Literal[ActionType.TOOL_CALL] = ActionType.TOOL_CALL
     tool_name: str = Field(min_length=1)
     arguments: dict[str, Any] = Field(default_factory=dict)
+    approval_id: str | None = None
 
 
 class ApprovalRequestAction(StrictBaseModel):

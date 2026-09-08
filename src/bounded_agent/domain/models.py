@@ -84,6 +84,8 @@ class AgentState(StrictBaseModel):
     pending_approval_ids: list[str] = Field(default_factory=list)
     tool_call_history: list[dict[str, Any]] = Field(default_factory=list)
     retries_by_failure_type: dict[ErrorType, int] = Field(default_factory=dict)
+    invalid_action_count: int = Field(default=0, ge=0)
+    safety_events: list[dict[str, Any]] = Field(default_factory=list)
     budget_usage: BudgetUsage = Field(default_factory=BudgetUsage)
     terminal_state: TerminalState | None = None
 

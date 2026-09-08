@@ -276,26 +276,31 @@ def test_runner_updates_state_after_tool_calls_and_errors(tmp_path):
             "ok": False,
         }
     ]
-    assert result.state.retries_by_failure_type == {ErrorType.NOT_FOUND: 1}
+    assert result.state.retries_by_failure_type == {}
     assert result.state.current_status == "observed:fetch_order"
 
 
 def test_runner_tracks_pending_approval_requests(tmp_path):
-    source = DeterministicDecisionSource(
-        [
-            approval_request_decision_payload(),
-            needs_human_approval_decision_payload(),
-        ]
-    )
-    runner = AgentRunner(source, config=runner_config(tmp_path))
+    settings = Settings(_env_file=None, runs_dir=tmp_path / "runs")
+    source = ApprovalThenStopDecisionSource()
+    runner = AgentRunner(source, config=runner_config(tmp_path), settings=settings)
 
-    result = runner.run(runner_request())
+    result = runner.run_scenario("support_001", "run_001")
 
-    assert result.state.pending_approval_ids == ["run_001:approval:apply_refund:1"]
+    assert len(result.state.pending_approval_ids) == 1
+    approval_id = result.state.pending_approval_ids[0]
+    assert approval_id.startswith("approval_")
     assert result.state.completed_actions == ["request_approval"]
     assert result.state.budget_usage.steps == 1
     assert result.state.current_status == "approval_requested"
     assert result.terminal_result.terminal_state is TerminalState.NEEDS_HUMAN_APPROVAL
+    assert result.terminal_result.approval_request_id == approval_id
+    connection = connect_database(result.db_path)
+    approval = connection.execute(
+        "SELECT status, action_type FROM approvals WHERE approval_id = ?", (approval_id,)
+    ).fetchone()
+    connection.close()
+    assert dict(approval) == {"status": "pending", "action_type": "apply_refund"}
 
 
 def test_runner_writes_trace_events_for_decisions_tools_observations_and_terminal(tmp_path):
@@ -558,7 +563,7 @@ def test_runner_emits_budget_terminal_after_tool_action_exhausts_steps(tmp_path)
     ]
 
 
-def test_runner_blocks_tool_error_when_retry_budget_is_exhausted(tmp_path):
+def test_runner_does_not_retry_non_retryable_tool_errors(tmp_path):
     settings = Settings(_env_file=None, runs_dir=tmp_path / "runs")
     source = DeterministicDecisionSource(
         [
@@ -585,12 +590,70 @@ def test_runner_blocks_tool_error_when_retry_budget_is_exhausted(tmp_path):
 
     result = runner.run_scenario("support_001", "run_001")
 
-    assert result.terminal_result.terminal_state is TerminalState.BLOCKED_TOOL_ERROR
-    assert result.terminal_result.failed_tool == "fetch_order"
-    assert result.terminal_result.error_type is ErrorType.NOT_FOUND
-    assert result.terminal_result.retry_count == 1
-    assert result.terminal_result.last_error.type is ErrorType.NOT_FOUND
-    assert result.terminal_result.errors == [result.terminal_result.last_error]
+    assert result.terminal_result.terminal_state is TerminalState.RESOLVED
+    assert result.state.retries_by_failure_type == {}
+
+
+def test_runner_replans_once_after_an_invalid_action(tmp_path):
+    source = DeterministicDecisionSource(
+        [
+            {
+                "thought_summary": "Call an unknown tool.",
+                "action": {"type": "tool_call", "tool_name": "unknown_tool", "arguments": {}},
+                "safety_check": {"permission_level": "read_only", "approval_required": False},
+            },
+            resolved_decision_payload(),
+        ]
+    )
+    runner = AgentRunner(
+        source,
+        config=RunnerConfig(
+            trace_path=tmp_path / "trace.jsonl",
+            max_invalid_actions=1,
+        ),
+    )
+
+    result = runner.run(runner_request())
+
+    assert result.terminal_result.terminal_state is TerminalState.RESOLVED
+    assert result.state.invalid_action_count == 1
+    assert result.state.safety_events == [
+        {
+            "event": "invalid_action",
+            "tool_name": "unknown_tool",
+            "errors": ["Unknown tool."],
+            "invalid_action_count": 1,
+        }
+    ]
+
+
+def test_runner_sanitizes_untrusted_ticket_content_in_later_context(tmp_path):
+    settings = Settings(_env_file=None, runs_dir=tmp_path / "runs")
+    source = ContextSequenceDecisionSource(
+        [
+            {
+                "thought_summary": "Inspect the ticket as untrusted data.",
+                "action": {
+                    "type": "tool_call",
+                    "tool_name": "fetch_ticket",
+                    "arguments": {"ticket_id": "t_008"},
+                },
+                "safety_check": {"permission_level": "read_only", "approval_required": False},
+            },
+            escalated_bundle_decision_payload(),
+        ]
+    )
+    runner = AgentRunner(source, config=runner_config(tmp_path), settings=settings)
+
+    result = runner.run_scenario("support_008", "run_008")
+
+    context = source.seen_contexts[1].bounded_context.to_decision_payload()
+    ticket = context["observations"][0]["facts"]["ticket"]
+    assert context["observations"][0]["content_trust"] == "untrusted_data"
+    assert ticket["body"] == "[untrusted content omitted; see tool history]"
+    assert result.state.safety_events
+    assert result.state.safety_events[0]["event"] == "untrusted_instruction_marker"
+    assert "ignore all previous" in result.observations[0].facts["ticket"]["body"].lower()
 
 
 def test_runner_emits_unrecoverable_when_retry_budget_exhausts_without_tool_error(tmp_path):
@@ -717,9 +780,10 @@ def test_bounded_context_payload_contains_decision_inputs_without_raw_db_path():
     assert fetch_ticket["mutates_state"] is False
     assert payload["observations"] == [
         {
-            "tool_name": "fetch_ticket",
-            "summary": "Fetched ticket t_001.",
-            "facts": {"ticket_id": "t_001"},
+                "tool_name": "fetch_ticket",
+                "summary": "Fetched ticket t_001.",
+                "content_trust": "untrusted_data",
+                "facts": {"ticket_id": "t_001"},
             "ok": True,
             "error_type": None,
         }
@@ -964,6 +1028,49 @@ def test_validate_action_decision_rejects_retry_for_unknown_tool():
     assert validation.errors == ("unknown retry tool: missing_tool",)
 
 
+def test_validate_action_decision_rejects_non_retryable_error_type():
+    decision = ActionDecision(
+        thought_summary="Retry a permanent missing-record error.",
+        action={
+            "type": "retry",
+            "failed_tool": "fetch_order",
+            "error_type": "not_found",
+        },
+        safety_check={"permission_level": "read_only", "approval_required": False},
+    )
+
+    validation = validate_action_decision(decision, build_default_registry())
+
+    assert validation.valid is False
+    assert validation.errors == ("error type is not retryable: not_found",)
+
+
+def test_runner_records_replan_as_a_bounded_transition(tmp_path):
+    source = DeterministicDecisionSource(
+        [
+            {
+                "thought_summary": "Replan using the validated ticket ID.",
+                "action": {
+                    "type": "replan",
+                    "reason": "The prior action had invalid arguments.",
+                    "known_facts": {"ticket_id": "t_001"},
+                    "next_goal": "Fetch the ticket with its required ID.",
+                },
+                "safety_check": {"permission_level": "read_only", "approval_required": False},
+            },
+            resolved_decision_payload(),
+        ]
+    )
+    runner = AgentRunner(source, config=runner_config(tmp_path))
+
+    result = runner.run(runner_request())
+
+    assert result.terminal_result.terminal_state is TerminalState.RESOLVED
+    assert result.state.completed_actions == ["replan"]
+    assert result.state.known_facts["ticket_id"] == "t_001"
+    assert result.state.budget_usage.steps == 1
+
+
 def runner_request(initial_state=None) -> RunnerRequest:
     return RunnerRequest(
         run_id="run_001",
@@ -1148,6 +1255,25 @@ class InterruptAfterFirstDecisionSource:
             raise RuntimeError("simulated interruption")
         self.called = True
         return ActionDecision.model_validate(self.first_decision)
+
+
+class ApprovalThenStopDecisionSource:
+    def decide(self, context):
+        if not context.state.pending_approval_ids:
+            return ActionDecision.model_validate(approval_request_decision_payload())
+        payload = needs_human_approval_decision_payload()
+        payload["action"]["fields"]["approval_request_id"] = context.state.pending_approval_ids[-1]
+        return ActionDecision.model_validate(payload)
+
+
+class ContextSequenceDecisionSource:
+    def __init__(self, decisions):
+        self.decisions = iter(decisions)
+        self.seen_contexts = []
+
+    def decide(self, context):
+        self.seen_contexts.append(context)
+        return ActionDecision.model_validate(next(self.decisions))
 
 
 def runner_config(

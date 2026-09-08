@@ -25,12 +25,17 @@ class RunMemory:
     def tool_history_path(self) -> Path:
         return self.directory / "tool_history.jsonl"
 
+    @property
+    def safety_path(self) -> Path:
+        return self.directory / "safety.md"
+
     def update(self, state: AgentState, observations: list[Any]) -> None:
         self.directory.mkdir(parents=True, exist_ok=True)
         self.facts_path.write_text(render_facts(state), encoding="utf-8")
         self.decisions_path.write_text(render_decisions(state), encoding="utf-8")
         self.open_questions_path.write_text(render_open_questions(observations), encoding="utf-8")
         self.tool_history_path.write_text(render_tool_history(observations), encoding="utf-8")
+        self.safety_path.write_text(render_safety_events(state), encoding="utf-8")
 
 
 def render_facts(state: AgentState) -> str:
@@ -73,3 +78,16 @@ def render_tool_history(observations: list[Any]) -> str:
         json.dumps(observation.model_dump(mode="json"), sort_keys=True) + "\n"
         for observation in observations
     )
+
+
+def render_safety_events(state: AgentState) -> str:
+    lines = ["# Safety Events", ""]
+    for event in state.safety_events:
+        lines.append("```json")
+        lines.append(json.dumps(event, indent=2, sort_keys=True))
+        lines.append("```")
+        lines.append("")
+    if len(lines) == 2:
+        lines.append("No safety events recorded.")
+        lines.append("")
+    return "\n".join(lines)
